@@ -1,0 +1,40 @@
+name: CI - Level 2a Scripted Agents
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  scripted-agents:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install jj
+        run: |
+          curl -fsSL https://github.com/jj-vcs/jj/releases/download/v0.28.2/jj-v0.28.2-x86_64-unknown-linux-musl.tar.gz \
+            | sudo tar -xzf - -C /usr/local/bin/ ./jj
+          jj version
+
+      - name: Configure git & jj
+        run: |
+          git config --global user.name "CI"
+          git config --global user.email "ci@jj-mailbox.test"
+          mkdir -p ~/.config/jj
+          echo -e '[user]\nname = "CI"\nemail = "ci@jj-mailbox.test"' > ~/.config/jj/config.toml
+
+      - name: Make CLI executable
+        run: chmod +x bin/jj-mailbox
+
+      - name: Run Level 2a - Scripted agents
+        run: python3 tests/level2a-scripted/test.py
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "## Level 2a: Scripted Agents" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- No LLM required" >> $GITHUB_STEP_SUMMARY
+          echo "- Tests: refs chain, multi-turn threading, shared artifacts" >> $GITHUB_STEP_SUMMARY

@@ -25,7 +25,7 @@ jj-mailbox v${VERSION} — file-based message passing for AI agents
 Usage:
   jj-mailbox init <repo-path> [--remote <git-url>]    Initialize a mailbox repo
   jj-mailbox register <name> [--desc <description>]    Register an agent
-  jj-mailbox send <to> <subject> <body>                Send a message
+  jj-mailbox send <to> <subject> <body> [--refs <ids>]  Send a message (--refs: comma-separated message ids)
   jj-mailbox inbox [--agent <name>]                    Check inbox
   jj-mailbox sync [--interval <seconds>]               Run sync loop
   jj-mailbox status                                    Show all agents' status
@@ -186,13 +186,24 @@ EOF
 cmd_send() {
   ensure_repo
   ensure_jj
-  local to="${1:?Usage: jj-mailbox send <to> <subject> <body>}"
+  local to="${1:?Usage: jj-mailbox send <to> <subject> <body> [--refs <id1,id2,...>]}"
   local subject="${2:?}"
   local body="${3:?}"
+  local refs_arg=""
   local from
   from="$(get_agent)"
   local repo
   repo="$(get_repo)"
+
+  # Parse optional --refs flag (remaining args after positional 3)
+  shift 3 || true
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --refs) refs_arg="${2:-}"; shift 2 ;;
+      *) shift ;;
+    esac
+  done
+
   cd "${repo}"
 
   # Verify recipient exists
@@ -208,6 +219,12 @@ cmd_send() {
   ts="$(ts_filename)"
   local filename="${ts}_${from}_${msg_id}.json"
 
+  # Build refs JSON array from comma-separated ids
+  local refs_json="[]"
+  if [[ -n "${refs_arg}" ]]; then
+    refs_json=$(python3 -c "import json,sys; ids=[x.strip() for x in sys.argv[1].split(',') if x.strip()]; print(json.dumps(ids))" "${refs_arg}")
+  fi
+
   cat > "inbox/${to}/new/${filename}" <<EOF
 {
   "version": "0.1",
@@ -218,7 +235,7 @@ cmd_send() {
   "type": "message",
   "subject": "${subject}",
   "body": "${body}",
-  "refs": [],
+  "refs": ${refs_json},
   "metadata": {}
 }
 EOF
@@ -228,6 +245,8 @@ EOF
   ok "Message sent: ${from} → ${to}"
   log "  Subject: ${subject}"
   log "  File: inbox/${to}/new/${filename}"
+  log "  ID: ${msg_id}"
+  echo "${msg_id}"
 }
 
 cmd_inbox() {

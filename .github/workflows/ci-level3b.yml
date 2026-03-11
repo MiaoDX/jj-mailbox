@@ -1,0 +1,93 @@
+name: CI - Level 3b Quality LLM Agent
+
+on:
+  workflow_dispatch:
+    inputs:
+      preset:
+        description: 'Model preset'
+        required: false
+        default: 'kimi'
+        type: choice
+        options:
+          - kimi
+          - gpt4o-mini
+          - custom
+      api_base:
+        description: 'Custom API base URL (only for preset=custom)'
+        required: false
+        default: 'https://api.moonshot.cn/v1'
+        type: string
+      model:
+        description: 'Custom model name (only for preset=custom)'
+        required: false
+        default: 'moonshot-v1-8k'
+        type: string
+
+jobs:
+  quality-llm-agent:
+    runs-on: ubuntu-latest
+    env:
+      LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve model preset
+        id: model
+        run: |
+          case "${{ inputs.preset }}" in
+            kimi)
+              echo "api_base=https://api.moonshot.cn/v1" >> $GITHUB_OUTPUT
+              echo "model=moonshot-v1-8k" >> $GITHUB_OUTPUT
+              echo "label=Kimi (moonshot-v1-8k)" >> $GITHUB_OUTPUT
+              ;;
+            gpt4o-mini)
+              echo "api_base=https://api.openai.com/v1" >> $GITHUB_OUTPUT
+              echo "model=gpt-4o-mini" >> $GITHUB_OUTPUT
+              echo "label=GPT-4o-mini" >> $GITHUB_OUTPUT
+              ;;
+            custom)
+              echo "api_base=${{ inputs.api_base }}" >> $GITHUB_OUTPUT
+              echo "model=${{ inputs.model }}" >> $GITHUB_OUTPUT
+              echo "label=${{ inputs.model }} (custom)" >> $GITHUB_OUTPUT
+              ;;
+          esac
+
+      - name: Install jj
+        run: |
+          curl -fsSL https://github.com/jj-vcs/jj/releases/download/v0.28.2/jj-v0.28.2-x86_64-unknown-linux-musl.tar.gz \
+            | sudo tar -xzf - -C /usr/local/bin/ ./jj
+          jj version
+
+      - name: Configure git & jj
+        run: |
+          git config --global user.name "CI"
+          git config --global user.email "ci@jj-mailbox.test"
+          mkdir -p ~/.config/jj
+          echo -e '[user]\nname = "CI"\nemail = "ci@jj-mailbox.test"' > ~/.config/jj/config.toml
+
+      - name: Make CLI executable
+        run: chmod +x bin/jj-mailbox
+
+      - name: Install openai
+        run: pip install openai
+
+      - name: Run Level 3b - Quality LLM agent
+        env:
+          LLM_API_BASE: ${{ steps.model.outputs.api_base }}
+          LLM_MODEL: ${{ steps.model.outputs.model }}
+        run: python3 tests/level3b-llm-online/test.py
+
+      - name: Upload conversation log
+        uses: actions/upload-artifact@v4
+        with:
+          name: level3b-conversation-log
+          path: /tmp/jj-mailbox-3b-*/shared/artifacts/
+          if-no-files-found: ignore
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "## Level 3b: Quality LLM Agent" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Model:** ${{ steps.model.outputs.label }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Scenario:** 3-agent (Planner + Researcher + Critic), 5 rounds" >> $GITHUB_STEP_SUMMARY

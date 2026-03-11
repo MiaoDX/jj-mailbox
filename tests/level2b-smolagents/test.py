@@ -1,0 +1,146 @@
+#!/usr/bin/env python3
+"""
+Level 2b: smolagents tool-calling test.
+
+Uses smolagents + Qwen/Qwen2.5-0.5B-Instruct (free with HF_TOKEN).
+jj-mailbox CLI is wrapped as smolagents Tool subclasses.
+
+Skips gracefully if HF_TOKEN is not set.
+
+Scenario:
+  Alice agent sends Bob a message about a caching design,
+  then polls until Bob replies, and reads the reply.
+"""
+import os
+import shutil
+import subprocess
+import sys
+import tempfile
+
+# Resolve paths
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+REPO_ROOT = os.path.dirname(os.path.dirname(SCRIPT_DIR))
+BIN = os.path.join(REPO_ROOT, "bin", "jj-mailbox")
+
+HF_TOKEN = os.environ.get("HF_TOKEN", "")
+HF_MODEL = os.environ.get("HF_MODEL", "Qwen/Qwen2.5-0.5B-Instruct")
+
+
+def run(cmd, env=None, check=True):
+    merged_env = {**os.environ, **(env or {})}
+    result = subprocess.run(cmd, shell=True, capture_output=True, text=True, env=merged_env)
+    if check and result.returncode != 0:
+        print(f"FAIL: {cmd}\n  {result.stderr.strip()}")
+        sys.exit(1)
+    return result.stdout.strip()
+
+
+def setup_repo():
+    repo = tempfile.mkdtemp(prefix="jj-mailbox-2b-")
+    run(f"git config --global user.email ci@test.local 2>/dev/null || true", check=False)
+    run(f"git config --global user.name CI 2>/dev/null || true", check=False)
+    run(f"{BIN} init {repo}")
+    run(f"JJ_MAILBOX_REPO={repo} {BIN} register alice 'API designer'")
+    run(f"JJ_MAILBOX_REPO={repo} {BIN} register bob 'Code reviewer'")
+    os.makedirs(os.path.join(repo, "shared", "artifacts"), exist_ok=True)
+    return repo
+
+
+def main():
+    print("=" * 60)
+    print("Level 2b: smolagents tool-calling test")
+    print("=" * 60)
+
+    if not HF_TOKEN:
+        print()
+        print("⏭  SKIP: HF_TOKEN not set.")
+        print("   Set HF_TOKEN to run this test with a free HF model.")
+        print("   Get a token at: https://hf.co/settings/tokens")
+        sys.exit(0)
+
+    # Import smolagents — provide a clear error if not installed
+    try:
+        from smolagents import CodeAgent, InferenceClientModel
+    except ImportError:
+        print("ERROR: smolagents not installed.")
+        print("  pip install smolagents")
+        sys.exit(1)
+
+    from tools import CheckInboxTool, ReadMessageTool, SendMessageTool
+
+    repo = setup_repo()
+    print(f"Test repo: {repo}")
+    print(f"Model: {HF_MODEL}")
+    print()
+
+    try:
+        # --- Alice agent: sends message, checks for reply ---
+        alice_tools = [
+            SendMessageTool("alice", repo),
+            CheckInboxTool("alice", repo),
+            ReadMessageTool("alice", repo),
+        ]
+        alice_model = InferenceClientModel(HF_MODEL, token=HF_TOKEN)
+        alice_agent = CodeAgent(tools=alice_tools, model=alice_model, max_steps=5)
+
+        print("Running Alice agent...")
+        alice_result = alice_agent.run(
+            "You are Alice. Use the send_message tool to send Bob a message "
+            "about choosing between LRU and Redis for caching. "
+            "Subject: 'Caching design'. "
+            "Then use check_inbox to see if Bob replied. "
+            "Report what you did."
+        )
+        print(f"Alice result: {alice_result}")
+        print()
+
+        # --- Bob agent: reads Alice's message, replies ---
+        bob_tools = [
+            ReadMessageTool("bob", repo),
+            SendMessageTool("bob", repo),
+            CheckInboxTool("bob", repo),
+        ]
+        bob_model = InferenceClientModel(HF_MODEL, token=HF_TOKEN)
+        bob_agent = CodeAgent(tools=bob_tools, model=bob_model, max_steps=5)
+
+        print("Running Bob agent...")
+        bob_result = bob_agent.run(
+            "You are Bob. Use read_message to read your latest message. "
+            "Then use send_message to reply to alice with your recommendation "
+            "on caching strategy. Subject: 'Re: Caching design'. "
+            "Report what you did."
+        )
+        print(f"Bob result: {bob_result}")
+        print()
+
+        # Verify at least one message was sent by checking Bob's inbox was non-empty
+        # and that files exist in processed or new dirs
+        bob_new = os.path.join(repo, "inbox/bob/new")
+        bob_proc = os.path.join(repo, "inbox/bob/processed")
+        alice_new = os.path.join(repo, "inbox/alice/new")
+        alice_proc = os.path.join(repo, "inbox/alice/processed")
+
+        bob_msgs = (
+            len([f for f in os.listdir(bob_new) if f.endswith(".json")])
+            + len([f for f in os.listdir(bob_proc) if f.endswith(".json")])
+        )
+        alice_msgs = (
+            len([f for f in os.listdir(alice_new) if f.endswith(".json")])
+            + len([f for f in os.listdir(alice_proc) if f.endswith(".json")])
+        )
+
+        print(f"Messages delivered to bob: {bob_msgs}")
+        print(f"Messages delivered to alice: {alice_msgs}")
+
+        assert bob_msgs >= 1, "Bob should have received at least 1 message from Alice"
+        print()
+        print("=" * 60)
+        print("✅ Level 2b: smolagents test passed!")
+        print("=" * 60)
+
+    finally:
+        shutil.rmtree(repo, ignore_errors=True)
+
+
+if __name__ == "__main__":
+    main()

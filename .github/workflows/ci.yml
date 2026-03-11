@@ -123,6 +123,48 @@ jobs:
           test "$CHARLIE_COUNT" -eq 1
           echo "✅ multi-agent broadcast"
 
+      - name: Test - Multi-turn threading with refs
+        env:
+          JJ_MAILBOX_REPO: /tmp/test-mailbox
+        run: |
+          cd /tmp/test-mailbox
+          # Turn 1: alice → bob: task proposal
+          MSG1_ID=$(JJ_MAILBOX_AGENT=alice $GITHUB_WORKSPACE/bin/jj-mailbox send bob "Cache design" "Task: design a cache. Option A or B?" | tail -1)
+          echo "Turn 1 id: $MSG1_ID"
+          test -n "$MSG1_ID"
+
+          # Turn 2: bob reads, replies with refs=[msg1_id]
+          JJ_MAILBOX_AGENT=bob $GITHUB_WORKSPACE/bin/jj-mailbox read bob > /dev/null
+          MSG2_ID=$(JJ_MAILBOX_AGENT=bob $GITHUB_WORKSPACE/bin/jj-mailbox send alice "Re: Cache design" "Option B." --refs "$MSG1_ID" | tail -1)
+          echo "Turn 2 id: $MSG2_ID"
+          test -n "$MSG2_ID"
+
+          # Verify msg2 has refs=[msg1_id]
+          MSG2_FILE=$(find inbox/alice/new -name '*.json' | sort | tail -1)
+          MSG2_REFS=$(python3 -c "import json; print(json.load(open('$MSG2_FILE'))['refs'])")
+          echo "Turn 2 refs: $MSG2_REFS"
+          python3 -c "import json; data=json.load(open('$MSG2_FILE')); refs=data['refs']; assert '$MSG1_ID' in refs, f'msg2 refs missing msg1: {refs}'"
+
+          # Turn 3: alice reads reply, sends ack with refs=[msg2_id]
+          JJ_MAILBOX_AGENT=alice $GITHUB_WORKSPACE/bin/jj-mailbox read alice > /dev/null
+          MSG3_ID=$(JJ_MAILBOX_AGENT=alice $GITHUB_WORKSPACE/bin/jj-mailbox send bob "Re: Cache design" "Confirmed. Writing design doc." --refs "$MSG2_ID" | tail -1)
+          echo "Turn 3 id: $MSG3_ID"
+
+          # Verify msg3 has refs=[msg2_id]
+          MSG3_FILE=$(find inbox/bob/new -name '*.json' | sort | tail -1)
+          python3 -c "import json; data=json.load(open('$MSG3_FILE')); refs=data['refs']; assert '$MSG2_ID' in refs, f'msg3 refs missing msg2: {refs}'"
+
+          # Read turn 3 to move to processed
+          JJ_MAILBOX_AGENT=bob $GITHUB_WORKSPACE/bin/jj-mailbox read bob > /dev/null
+
+          # Verify all 3 thread messages are in processed
+          ALICE_PROC=$(find inbox/alice/processed -name '*.json' | wc -l)
+          BOB_PROC=$(find inbox/bob/processed -name '*.json' | wc -l)
+          echo "Alice processed: $ALICE_PROC, Bob processed: $BOB_PROC"
+          test "$ALICE_PROC" -ge 1
+          test "$BOB_PROC" -ge 2
+          echo "✅ multi-turn threading with refs chain"
+
       - name: Test - jj history
         run: |
           cd /tmp/test-mailbox
@@ -147,4 +189,5 @@ jobs:
           echo "  ✅ bidirectional"
           echo "  ✅ status"
           echo "  ✅ multi-agent broadcast"
+          echo "  ✅ multi-turn threading with refs"
           echo "  ✅ jj history"
