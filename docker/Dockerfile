@@ -10,7 +10,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Install jj (Jujutsu)
-RUN curl -fsSL https://github.com/jj-vcs/jj/releases/latest/download/jj-v0.28.2-x86_64-unknown-linux-musl.tar.gz \
+RUN curl -fsSL https://github.com/jj-vcs/jj/releases/download/v0.28.2/jj-v0.28.2-x86_64-unknown-linux-musl.tar.gz \
     | tar xz -C /usr/local/bin/ jj \
     && chmod +x /usr/local/bin/jj
 
