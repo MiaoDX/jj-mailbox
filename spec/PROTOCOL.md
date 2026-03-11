@@ -48,7 +48,7 @@ Messages are JSON files in `inbox/{recipient}/new/`.
 
 Example:
 ```
-2026-03-11T14:30:00Z_alice_msg-a1b2c3.json
+2026-03-11T14-30-00Z_alice_msg-a1b2c3.json
 ```
 
 Rules:
