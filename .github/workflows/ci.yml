@@ -1,0 +1,150 @@
+name: CI - Core Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test-cli:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install jj
+        run: |
+          curl -fsSL https://github.com/jj-vcs/jj/releases/download/v0.28.2/jj-v0.28.2-x86_64-unknown-linux-musl.tar.gz \
+            | sudo tar xz -C /usr/local/bin/ jj
+          jj version
+
+      - name: Configure git & jj
+        run: |
+          git config --global user.name "CI"
+          git config --global user.email "ci@jj-mailbox.test"
+          mkdir -p ~/.config/jj
+          echo -e '[user]\nname = "CI"\nemail = "ci@jj-mailbox.test"' > ~/.config/jj/config.toml
+
+      - name: Make CLI executable
+        run: chmod +x bin/jj-mailbox
+
+      - name: Test - Init
+        run: |
+          bin/jj-mailbox init /tmp/test-mailbox
+          test -d /tmp/test-mailbox/.jj
+          test -f /tmp/test-mailbox/AGENTS.md
+          echo "✅ init"
+
+      - name: Test - Register agents
+        run: |
+          cd /tmp/test-mailbox
+          $GITHUB_WORKSPACE/bin/jj-mailbox register alice "Research specialist"
+          $GITHUB_WORKSPACE/bin/jj-mailbox register bob "Code reviewer"
+          test -f agents/alice/profile.json
+          test -f agents/bob/profile.json
+          test -d inbox/alice/new
+          test -d inbox/bob/new
+          echo "✅ register"
+
+      - name: Test - Send message
+        env:
+          JJ_MAILBOX_REPO: /tmp/test-mailbox
+          JJ_MAILBOX_AGENT: alice
+        run: |
+          cd /tmp/test-mailbox
+          $GITHUB_WORKSPACE/bin/jj-mailbox send bob "Hello" "Hi Bob, this is a test."
+          COUNT=$(find inbox/bob/new -name '*.json' | wc -l)
+          test "$COUNT" -eq 1
+          echo "✅ send"
+
+      - name: Test - Check inbox
+        env:
+          JJ_MAILBOX_REPO: /tmp/test-mailbox
+          JJ_MAILBOX_AGENT: bob
+        run: |
+          cd /tmp/test-mailbox
+          OUTPUT=$($GITHUB_WORKSPACE/bin/jj-mailbox inbox bob 2>&1)
+          echo "$OUTPUT"
+          echo "$OUTPUT" | grep -q "1 message"
+          echo "✅ inbox"
+
+      - name: Test - Read message
+        env:
+          JJ_MAILBOX_REPO: /tmp/test-mailbox
+          JJ_MAILBOX_AGENT: bob
+        run: |
+          cd /tmp/test-mailbox
+          MSG=$($GITHUB_WORKSPACE/bin/jj-mailbox read bob)
+          echo "$MSG" | python3 -m json.tool
+          echo "$MSG" | python3 -c "import sys,json; m=json.load(sys.stdin); assert m['from']=='alice'; assert m['to']=='bob'"
+          # After read, inbox should be empty
+          COUNT=$(find inbox/bob/new -name '*.json' | wc -l)
+          test "$COUNT" -eq 0
+          # Message should be in processed
+          PCOUNT=$(find inbox/bob/processed -name '*.json' | wc -l)
+          test "$PCOUNT" -eq 1
+          echo "✅ read + process"
+
+      - name: Test - Bidirectional communication
+        env:
+          JJ_MAILBOX_REPO: /tmp/test-mailbox
+        run: |
+          cd /tmp/test-mailbox
+          # Bob replies to Alice
+          JJ_MAILBOX_AGENT=bob $GITHUB_WORKSPACE/bin/jj-mailbox send alice "Reply" "Got your message, thanks!"
+          # Alice should have 1 message
+          COUNT=$(find inbox/alice/new -name '*.json' | wc -l)
+          test "$COUNT" -eq 1
+          echo "✅ bidirectional"
+
+      - name: Test - Status
+        env:
+          JJ_MAILBOX_REPO: /tmp/test-mailbox
+        run: |
+          cd /tmp/test-mailbox
+          OUTPUT=$($GITHUB_WORKSPACE/bin/jj-mailbox status 2>&1)
+          echo "$OUTPUT"
+          echo "$OUTPUT" | grep -q "alice"
+          echo "$OUTPUT" | grep -q "bob"
+          echo "✅ status"
+
+      - name: Test - Multiple agents
+        env:
+          JJ_MAILBOX_REPO: /tmp/test-mailbox
+        run: |
+          cd /tmp/test-mailbox
+          $GITHUB_WORKSPACE/bin/jj-mailbox register charlie "Testing specialist"
+          # Broadcast: alice sends to both bob and charlie
+          JJ_MAILBOX_AGENT=alice $GITHUB_WORKSPACE/bin/jj-mailbox send bob "Broadcast" "Team update: milestone reached."
+          JJ_MAILBOX_AGENT=alice $GITHUB_WORKSPACE/bin/jj-mailbox send charlie "Broadcast" "Team update: milestone reached."
+          BOB_COUNT=$(find inbox/bob/new -name '*.json' | wc -l)
+          CHARLIE_COUNT=$(find inbox/charlie/new -name '*.json' | wc -l)
+          test "$BOB_COUNT" -eq 1
+          test "$CHARLIE_COUNT" -eq 1
+          echo "✅ multi-agent broadcast"
+
+      - name: Test - jj history
+        run: |
+          cd /tmp/test-mailbox
+          echo "=== jj log ==="
+          jj log --no-pager
+          echo ""
+          echo "=== jj op log ==="
+          jj op log --no-pager | head -30
+          echo "✅ jj history preserved"
+
+      - name: Summary
+        run: |
+          echo ""
+          echo "🎉 All tests passed!"
+          echo ""
+          echo "Tested:"
+          echo "  ✅ init"
+          echo "  ✅ register"
+          echo "  ✅ send"
+          echo "  ✅ inbox"
+          echo "  ✅ read + process"
+          echo "  ✅ bidirectional"
+          echo "  ✅ status"
+          echo "  ✅ multi-agent broadcast"
+          echo "  ✅ jj history"

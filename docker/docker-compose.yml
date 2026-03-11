@@ -1,0 +1,109 @@
+version: "3.8"
+
+# jj-mailbox demo: Two OpenClaw agents communicating via file-based mailbox
+#
+# Usage:
+#   docker compose up -d
+#   docker compose logs -f
+#
+# This demo creates:
+#   - A bare git repo as the "remote" (shared volume)
+#   - Two OpenClaw agents (alice & bob) each with their own workspace
+#   - Each agent runs jj-mailbox sync in the background
+#
+# After startup, send messages between agents:
+#   docker compose exec alice jj-mailbox send bob "Hello" "Hi Bob, can you help me?"
+#   docker compose exec bob jj-mailbox inbox
+
+services:
+  # Shared git remote (simulated via a bare repo on a volume)
+  git-remote:
+    image: alpine/git:latest
+    command: >
+      sh -c "
+        if [ ! -d /git-remote/mailbox.git/HEAD ]; then
+          git init --bare /git-remote/mailbox.git;
+          echo 'Git remote ready.';
+        else
+          echo 'Git remote already exists.';
+        fi;
+        tail -f /dev/null
+      "
+    volumes:
+      - git-remote:/git-remote
+
+  # Agent Alice
+  alice:
+    build: .
+    container_name: jj-mailbox-alice
+    hostname: alice
+    environment:
+      - JJ_MAILBOX_AGENT=alice
+      - JJ_MAILBOX_REPO=/mailbox
+      - JJ_MAILBOX_INTERVAL=15
+      - GIT_REMOTE_URL=/git-remote/mailbox.git
+    volumes:
+      - git-remote:/git-remote
+      - alice-workspace:/mailbox
+    depends_on:
+      - git-remote
+    command: >
+      sh -c "
+        cd /mailbox;
+
+        # Initialize if needed
+        if [ ! -d .jj ]; then
+          jj git clone --colocate /git-remote/mailbox.git . 2>/dev/null ||
+          jj git init --colocate;
+          jj git remote add origin /git-remote/mailbox.git 2>/dev/null || true;
+          jj-mailbox register alice 'Research specialist';
+          jj git push --all 2>/dev/null || true;
+        fi;
+
+        # Sync and fetch latest
+        jj git fetch --all-remotes 2>/dev/null || true;
+
+        echo '=== Alice is online ===';
+        jj-mailbox sync
+      "
+
+  # Agent Bob
+  bob:
+    build: .
+    container_name: jj-mailbox-bob
+    hostname: bob
+    environment:
+      - JJ_MAILBOX_AGENT=bob
+      - JJ_MAILBOX_REPO=/mailbox
+      - JJ_MAILBOX_INTERVAL=15
+      - GIT_REMOTE_URL=/git-remote/mailbox.git
+    volumes:
+      - git-remote:/git-remote
+      - bob-workspace:/mailbox
+    depends_on:
+      - git-remote
+    command: >
+      sh -c "
+        sleep 5;
+        cd /mailbox;
+
+        # Initialize if needed
+        if [ ! -d .jj ]; then
+          jj git clone --colocate /git-remote/mailbox.git . 2>/dev/null ||
+          jj git init --colocate;
+          jj git remote add origin /git-remote/mailbox.git 2>/dev/null || true;
+          jj-mailbox register bob 'Code review specialist';
+          jj git push --all 2>/dev/null || true;
+        fi;
+
+        # Sync and fetch latest
+        jj git fetch --all-remotes 2>/dev/null || true;
+
+        echo '=== Bob is online ===';
+        jj-mailbox sync
+      "
+
+volumes:
+  git-remote:
+  alice-workspace:
+  bob-workspace:

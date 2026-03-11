@@ -1,0 +1,243 @@
+name: Demo - LLM Agent Conversation
+
+# Manual trigger only - this costs API credits
+on:
+  workflow_dispatch:
+    inputs:
+      preset:
+        description: 'Model preset (or choose custom)'
+        required: false
+        default: 'mimo-free'
+        type: choice
+        options:
+          - mimo-free
+          - kimi
+          - custom
+      api_base:
+        description: 'Custom API base URL (only for preset=custom)'
+        required: false
+        default: 'https://openrouter.ai/api/v1'
+        type: string
+      model:
+        description: 'Custom model name (only for preset=custom)'
+        required: false
+        default: 'xiaomi/mimo-v2-flash:free'
+        type: string
+      task:
+        description: 'Collaboration task for the agents'
+        required: false
+        default: 'Design a simple REST API for a todo app. Alice designs the endpoints, Bob reviews and suggests improvements.'
+        type: string
+
+jobs:
+  agent-conversation:
+    runs-on: ubuntu-latest
+    env:
+      LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve model preset
+        id: model
+        run: |
+          case "${{ inputs.preset }}" in
+            mimo-free)
+              # MiMo-V2-Flash via OpenRouter — completely free
+              echo "api_base=https://openrouter.ai/api/v1" >> $GITHUB_OUTPUT
+              echo "model=xiaomi/mimo-v2-flash:free" >> $GITHUB_OUTPUT
+              echo "label=MiMo-V2-Flash (free via OpenRouter)" >> $GITHUB_OUTPUT
+              ;;
+            kimi)
+              # Moonshot Kimi
+              echo "api_base=https://api.moonshot.cn/v1" >> $GITHUB_OUTPUT
+              echo "model=moonshot-v1-8k" >> $GITHUB_OUTPUT
+              echo "label=Kimi (moonshot-v1-8k)" >> $GITHUB_OUTPUT
+              ;;
+            custom)
+              echo "api_base=${{ inputs.api_base }}" >> $GITHUB_OUTPUT
+              echo "model=${{ inputs.model }}" >> $GITHUB_OUTPUT
+              echo "label=${{ inputs.model }} (custom)" >> $GITHUB_OUTPUT
+              ;;
+          esac
+
+      - name: Install jj
+        run: |
+          curl -fsSL https://github.com/jj-vcs/jj/releases/download/v0.28.2/jj-v0.28.2-x86_64-unknown-linux-musl.tar.gz \
+            | sudo tar xz -C /usr/local/bin/ jj
+          git config --global user.name "CI"
+          git config --global user.email "ci@jj-mailbox.test"
+          mkdir -p ~/.config/jj
+          echo -e '[user]\nname = "CI"\nemail = "ci@jj-mailbox.test"' > ~/.config/jj/config.toml
+
+      - name: Setup jj-mailbox
+        run: |
+          chmod +x bin/jj-mailbox
+          bin/jj-mailbox init /tmp/demo
+          cd /tmp/demo
+          $GITHUB_WORKSPACE/bin/jj-mailbox register alice "API designer"
+          $GITHUB_WORKSPACE/bin/jj-mailbox register bob "Code reviewer"
+
+      - name: Create agent script
+        run: |
+          cat > /tmp/agent-chat.py << 'PYTHON'
+          import json, sys, os, glob, urllib.request
+
+          API_KEY = os.environ["LLM_API_KEY"]
+          API_BASE = os.environ.get("LLM_API_BASE", "https://api.moonshot.cn/v1")
+          MODEL = os.environ.get("LLM_MODEL", "moonshot-v1-8k")
+          REPO = os.environ.get("JJ_MAILBOX_REPO", "/tmp/demo")
+
+          def llm_chat(system_prompt, user_message):
+              """Call any OpenAI-compatible API."""
+              url = f"{API_BASE}/chat/completions"
+              payload = json.dumps({
+                  "model": MODEL,
+                  "messages": [
+                      {"role": "system", "content": system_prompt},
+                      {"role": "user", "content": user_message}
+                  ],
+                  "max_tokens": 500,
+                  "temperature": 0.7
+              }).encode()
+              req = urllib.request.Request(url, data=payload, headers={
+                  "Content-Type": "application/json",
+                  "Authorization": f"Bearer {API_KEY}"
+              })
+              with urllib.request.urlopen(req, timeout=30) as resp:
+                  data = json.loads(resp.read())
+              return data["choices"][0]["message"]["content"]
+
+          def read_inbox(agent):
+              """Read newest message from agent's inbox."""
+              inbox = os.path.join(REPO, f"inbox/{agent}/new")
+              files = sorted(glob.glob(os.path.join(inbox, "*.json")))
+              if not files:
+                  return None
+              with open(files[0]) as f:
+                  msg = json.load(f)
+              # Move to processed
+              processed = os.path.join(REPO, f"inbox/{agent}/processed")
+              os.rename(files[0], os.path.join(processed, os.path.basename(files[0])))
+              return msg
+
+          def send_message(frm, to, subject, body):
+              """Write a message file to recipient's inbox."""
+              import time, random
+              ts = time.strftime("%Y-%m-%dT%H-%M-%SZ", time.gmtime())
+              msg_id = f"msg-{random.randbytes(4).hex()}"
+              filename = f"{ts}_{frm}_{msg_id}.json"
+              msg = {
+                  "version": "0.1",
+                  "id": msg_id,
+                  "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                  "from": frm,
+                  "to": to,
+                  "type": "message",
+                  "subject": subject,
+                  "body": body,
+                  "refs": [],
+                  "metadata": {"model": MODEL}
+              }
+              path = os.path.join(REPO, f"inbox/{to}/new/{filename}")
+              with open(path, "w") as f:
+                  json.dump(msg, f, indent=2)
+              return msg
+
+          def main():
+              task = sys.argv[1] if len(sys.argv) > 1 else "Discuss a simple API design."
+              rounds = int(sys.argv[2]) if len(sys.argv) > 2 else 3
+
+              alice_system = (
+                  "You are Alice, an API designer. You are collaborating with Bob via messages. "
+                  "Keep responses concise (under 200 words). Be specific and technical."
+              )
+              bob_system = (
+                  "You are Bob, a code reviewer. You are collaborating with Alice via messages. "
+                  "Keep responses concise (under 200 words). Give constructive feedback."
+              )
+
+              conversation = []
+
+              # Round 1: Alice starts
+              print(f"\n{'='*60}")
+              print(f"Task: {task}")
+              print(f"Model: {MODEL}")
+              print(f"Rounds: {rounds}")
+              print(f"{'='*60}\n")
+
+              alice_msg = llm_chat(alice_system, f"Task: {task}\n\nWrite your initial proposal.")
+              send_message("alice", "bob", "Initial proposal", alice_msg)
+              conversation.append({"from": "alice", "body": alice_msg})
+              print(f"📨 Alice → Bob:\n{alice_msg}\n")
+
+              # Conversation loop
+              for i in range(rounds - 1):
+                  # Bob reads and replies
+                  msg = read_inbox("bob")
+                  context = "\n".join([f"{m['from']}: {m['body']}" for m in conversation])
+                  bob_msg = llm_chat(bob_system, f"Conversation so far:\n{context}\n\nRespond to Alice's latest message.")
+                  send_message("bob", "alice", f"Round {i+2} feedback", bob_msg)
+                  conversation.append({"from": "bob", "body": bob_msg})
+                  print(f"📨 Bob → Alice:\n{bob_msg}\n")
+
+                  # Alice reads and replies (except last round)
+                  if i < rounds - 2:
+                      msg = read_inbox("alice")
+                      context = "\n".join([f"{m['from']}: {m['body']}" for m in conversation])
+                      alice_msg = llm_chat(alice_system, f"Conversation so far:\n{context}\n\nRespond to Bob's feedback.")
+                      send_message("alice", "bob", f"Round {i+2} revision", alice_msg)
+                      conversation.append({"from": "alice", "body": alice_msg})
+                      print(f"📨 Alice → Bob:\n{alice_msg}\n")
+
+              # Save conversation log
+              log_path = os.path.join(REPO, "shared/artifacts/conversation.json")
+              os.makedirs(os.path.dirname(log_path), exist_ok=True)
+              with open(log_path, "w") as f:
+                  json.dump({"task": task, "model": MODEL, "conversation": conversation}, f, indent=2)
+
+              print(f"\n{'='*60}")
+              print(f"✅ Conversation complete! {len(conversation)} messages exchanged.")
+              print(f"Log saved to: shared/artifacts/conversation.json")
+              print(f"{'='*60}")
+
+          if __name__ == "__main__":
+              main()
+          PYTHON
+
+      - name: Run agent conversation
+        env:
+          JJ_MAILBOX_REPO: /tmp/demo
+          LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
+          LLM_API_BASE: ${{ steps.model.outputs.api_base }}
+          LLM_MODEL: ${{ steps.model.outputs.model }}
+        run: |
+          echo "🤖 Using: ${{ steps.model.outputs.label }}"
+          python3 /tmp/agent-chat.py "${{ inputs.task }}" 3
+
+      - name: Show jj history
+        run: |
+          cd /tmp/demo
+          echo "=== File tree ==="
+          find . -not -path './.jj/*' -not -path './.git/*' -type f | sort
+          echo ""
+          echo "=== jj log ==="
+          jj log --no-pager
+
+      - name: Upload conversation log
+        uses: actions/upload-artifact@v4
+        with:
+          name: conversation-log
+          path: /tmp/demo/shared/artifacts/conversation.json
+
+      - name: Post summary
+        run: |
+          echo "## 🤖 Agent Conversation Demo" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Model:** ${{ steps.model.outputs.label }}" >> $GITHUB_STEP_SUMMARY
+          echo "**API:** ${{ steps.model.outputs.api_base }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Task:** ${{ inputs.task }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Conversation" >> $GITHUB_STEP_SUMMARY
+          echo '```json' >> $GITHUB_STEP_SUMMARY
+          cat /tmp/demo/shared/artifacts/conversation.json >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
