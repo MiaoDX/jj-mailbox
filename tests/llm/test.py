@@ -21,6 +21,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 
 # Resolve paths
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -33,6 +34,10 @@ LLM_API_BASE = os.environ.get("LLM_API_BASE", "https://openrouter.ai/api/v1")
 LLM_MODEL = os.environ.get("LLM_MODEL", "openrouter/free")
 
 MAX_TURNS = 6  # max tool-calling turns per agent per round
+
+
+class GracefulSkip(Exception):
+    """Raised when the test should be skipped cleanly (exit 0)."""
 
 # --- OpenAI tool schemas ---
 TOOLS = [
@@ -151,8 +156,7 @@ def execute_tool(name, args, agent_name, repo):
     return f"Unknown tool: {name}"
 
 
-def run_agent(agent_name, system_prompt, user_prompt, repo, client, log,
-              force_tool=False):
+def run_agent(agent_name, system_prompt, user_prompt, repo, client, log):
     """Run an agent with tool calling, returning the final text response."""
     import openai
 
@@ -162,24 +166,39 @@ def run_agent(agent_name, system_prompt, user_prompt, repo, client, log,
     ]
 
     for turn in range(MAX_TURNS):
-        # Force tool use on first turn if requested (some free models skip tools)
-        choice = "required" if force_tool and turn == 0 else "auto"
-        try:
-            response = client.chat.completions.create(
-                model=LLM_MODEL,
-                messages=messages,
-                tools=TOOLS,
-                tool_choice=choice,
-                max_tokens=500,
-                temperature=0.7,
-            )
-        except openai.NotFoundError as e:
-            print(f"  [{agent_name}] Model error: {e.message}")
-            print(f"  Hint: try a different model — see docs/MODEL_CHOICES.md")
-            return f"Model error: {e.message}"
-        except openai.APIError as e:
-            print(f"  [{agent_name}] API error: {e}")
-            return f"API error: {e}"
+        # Always use "auto" — many free model providers reject "required"
+        # (e.g. z-ai returns 400, others return empty or text-only responses)
+        choice = "auto"
+        retry_delays = [5, 15, 30]
+        response = None
+        for attempt, delay in enumerate(retry_delays + [None]):
+            try:
+                response = client.chat.completions.create(
+                    model=LLM_MODEL,
+                    messages=messages,
+                    tools=TOOLS,
+                    tool_choice=choice,
+                    max_tokens=500,
+                    temperature=0.7,
+                )
+                break
+            except openai.RateLimitError:
+                if delay is None:
+                    msg = f"SKIP: Rate limited on {LLM_MODEL} — 429 after 3 retries"
+                    print(f"  [{agent_name}] {msg}")
+                    raise GracefulSkip(msg)
+                print(f"  [{agent_name}] 429 rate limited, retrying in {delay}s (attempt {attempt + 1}/3)...")
+                time.sleep(delay)
+            except openai.NotFoundError as e:
+                msg = f"SKIP: Model {LLM_MODEL} not available — 404"
+                print(f"  [{agent_name}] {msg}")
+                raise GracefulSkip(msg)
+            except openai.APIError as e:
+                print(f"  [{agent_name}] API error: {e}")
+                raise
+        if not response.choices:
+            print(f"  [{agent_name}] Empty response from {LLM_MODEL}, retrying turn...")
+            continue
         msg = response.choices[0].message
 
         # If no tool calls, we're done
@@ -247,12 +266,12 @@ def main():
         alice_reply = run_agent(
             "alice",
             "You are Alice, a software engineer. You collaborate with Bob via jj-mailbox. "
-            "You MUST use the send_message tool to communicate. Agent names are lowercase.",
+            "You MUST use the send_message tool to communicate — do NOT reply in plain text. "
+            "Agent names are lowercase.",
             "Use the send_message tool to send bob a message proposing a design for a "
             "'process_batch(items)' function. Include: purpose, parameters, return value. "
-            "Subject: 'Function design proposal'.",
+            "Subject: 'Function design proposal'. Call the tool now.",
             repo, client, log,
-            force_tool=True,
         )
         print(f"Alice: {alice_reply[:200]}")
         print()
@@ -262,11 +281,12 @@ def main():
         bob_reply = run_agent(
             "bob",
             "You are Bob, a code reviewer. You collaborate with Alice via jj-mailbox. "
-            "You MUST use read_inbox and send_message tools. Agent names are lowercase.",
+            "You MUST use read_inbox and send_message tools — do NOT reply in plain text. "
+            "Agent names are lowercase.",
             "Use read_inbox to read Alice's message, then use send_message to reply to alice "
-            "with your code review feedback. Subject: 'Re: Function design proposal'.",
+            "with your code review feedback. Subject: 'Re: Function design proposal'. "
+            "Call the tools now.",
             repo, client, log,
-            force_tool=True,
         )
         print(f"Bob: {bob_reply[:200]}")
         print()
@@ -325,6 +345,11 @@ def main():
         print("=" * 60)
         print("✅ LLM tool-calling agent test passed!")
         print("=" * 60)
+
+    except GracefulSkip as e:
+        print()
+        print(str(e))
+        sys.exit(0)
 
     finally:
         # Print file tree for visibility
