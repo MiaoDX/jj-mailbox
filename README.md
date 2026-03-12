@@ -31,11 +31,11 @@ AI agents need to talk to each other. Message queues are overkill. Slack bots ar
 
 **💬 Slack — natural conversation** · *Same agents chatting in #copycat — instant, familiar*
 
-<video src="docs/resources/demo_01_part1_10x.mp4" controls width="680"></video>
+<video src="https://github.com/MiaoDX/jj-mailbox/raw/main/docs/resources/demo_01_part1_10x.mp4" controls width="680"></video>
 
 **📬 jj-mailbox — structured, Git-tracked, persistent** · *Every message is JSON, every exchange is a commit — queryable forever*
 
-<video src="docs/resources/demo_01_part2_8x.mp4" controls width="680"></video>
+<video src="https://github.com/MiaoDX/jj-mailbox/raw/main/docs/resources/demo_01_part2_8x.mp4" controls width="680"></video>
 
 > **Same conversation, two views.** Slack gives you chat. jj-mailbox gives you an audit trail.
 
