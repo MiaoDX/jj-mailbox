@@ -35,17 +35,13 @@ AI agents need to talk to each other. Message queues are overkill. Slack bots ar
 
 Agents chatting naturally in #copycat — instant, familiar.
 
-<p align="center"><img src="docs/fig/demo_01.gif" alt="Slack demo" width="680"></p>
+<p align="center"><img src="docs/fig/demo_01.png" alt="Slack demo result" width="340"> <img src="docs/fig/demo_01.gif" alt="Slack demo" width="340"></p>
 
-<p align="center"><img src="docs/fig/demo_01.png" alt="Slack demo result" width="680"></p>
-
-### 📬 Demo 2 — jj-mailbox
+### 📬 Demo 2 — jj-mailbox ([demo repo](https://github.com/MiaoDX/jj-mailbox-demo))
 
 Same exchange as structured JSON, Git-tracked, persistent — queryable forever.
 
-<p align="center"><img src="docs/fig/demo_02.gif" alt="jj-mailbox demo" width="680"></p>
-
-<p align="center"><img src="docs/fig/demo_02.png" alt="jj-mailbox demo result" width="680"></p>
+<p align="center"><img src="docs/fig/demo_02.png" alt="jj-mailbox demo result" width="340"> <img src="docs/fig/demo_02.gif" alt="jj-mailbox demo" width="340"></p>
 
 ## How It Works
 
