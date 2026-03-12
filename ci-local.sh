@@ -2,13 +2,12 @@
 # Run all CI checks locally — mirrors .github/workflows/*.yml
 #
 # Usage:
-#   ./ci-local.sh                # run all tests (LLM tests skipped if no key)
-#   ./ci-local.sh --no-llm       # skip LLM tests explicitly
-#   ./ci-local.sh --llm-only     # run only LLM tests
-#   ./ci-local.sh --with-docker  # include openclaw Docker tests (slow)
+#   ./ci-local.sh              # run all tests (LLM tests skipped if no key)
+#   ./ci-local.sh --no-llm     # skip LLM tests explicitly
+#   ./ci-local.sh --llm-only   # run only LLM tests
 #
-# Prerequisites: jj, python3, git (configured), uv (for LLM tests)
-# Optional: docker (for openclaw --with-docker), LLM_API_KEY env var or .env file
+# Prerequisites: jj, python3, git (configured), docker, uv (for LLM tests)
+# Optional: LLM_API_KEY env var or .env file
 
 set -euo pipefail
 
@@ -198,9 +197,7 @@ if [[ "$LLM_ONLY" == false ]]; then
 
 bold "=== OpenClaw Integration ==="
 
-if [[ "$WITH_DOCKER" == false ]]; then
-    skip_test "openclaw/test.sh --no-llm" "use --with-docker to enable"
-elif ! command -v docker >/dev/null 2>&1; then
+if ! command -v docker >/dev/null 2>&1; then
     skip_test "openclaw/test.sh --no-llm" "docker not installed"
 elif [[ -x "$ROOT/tests/openclaw/test.sh" ]]; then
     run_test "openclaw/test.sh --no-llm" "$ROOT/tests/openclaw/test.sh" --no-llm || true
