@@ -18,7 +18,9 @@ x-agent-common: &agent-common
     dockerfile: tests/openclaw/Dockerfile
     network: host
   init: true
-  env_file: ../../.env
+  env_file:
+    - path: ../../.env
+      required: false
   volumes:
     - mailbox-data:/mailbox
 
