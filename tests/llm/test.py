@@ -18,15 +18,17 @@ Usage:
 import json
 import os
 import shutil
-import subprocess
 import sys
-import tempfile
 import time
 
 # Resolve paths
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 REPO_ROOT = os.path.dirname(os.path.dirname(SCRIPT_DIR))
 BIN = os.path.join(REPO_ROOT, "bin", "jj-mailbox")
+
+# Import shared helpers
+sys.path.insert(0, os.path.join(SCRIPT_DIR, ".."))
+from _helpers import run_cli, setup_repo as _setup_repo, cleanup_repo
 
 # Config from environment (defaults to OpenRouter)
 LLM_API_KEY = os.environ.get("LLM_API_KEY", "")
@@ -87,35 +89,8 @@ TOOLS = [
 ]
 
 
-def run_cli(cmd, env=None):
-    merged = {**os.environ, **(env or {})}
-    if isinstance(cmd, list):
-        result = subprocess.run(cmd, capture_output=True, text=True, env=merged)
-    else:
-        result = subprocess.run(cmd, shell=True, capture_output=True, text=True, env=merged)
-    return result.stdout.strip(), result.stderr.strip(), result.returncode
-
-
 def setup_repo():
-    repo = tempfile.mkdtemp(prefix="jj-mailbox-3a-")
-    subprocess.run(
-        "git config --global user.email ci@test.local 2>/dev/null || true",
-        shell=True, capture_output=True,
-    )
-    subprocess.run(
-        "git config --global user.name CI 2>/dev/null || true",
-        shell=True, capture_output=True,
-    )
-    # Configure jj user to suppress warnings
-    subprocess.run(
-        'mkdir -p ~/.config/jj && printf \'[user]\\nname = "CI"\\nemail = "ci@test.local"\\n\' > ~/.config/jj/config.toml 2>/dev/null || true',
-        shell=True, capture_output=True,
-    )
-    subprocess.run(f"{BIN} init {repo}", shell=True, check=True)
-    subprocess.run(f"JJ_MAILBOX_REPO={repo} {BIN} register alice 'Function designer'", shell=True, check=True)
-    subprocess.run(f"JJ_MAILBOX_REPO={repo} {BIN} register bob 'Code reviewer'", shell=True, check=True)
-    os.makedirs(os.path.join(repo, "shared", "artifacts"), exist_ok=True)
-    return repo
+    return _setup_repo(BIN, [("alice", "Function designer"), ("bob", "Code reviewer")], prefix="jj-mailbox-3a-")
 
 
 def execute_tool(name, args, agent_name, repo):
@@ -128,7 +103,7 @@ def execute_tool(name, args, agent_name, repo):
         cmd = [BIN, "send", to, subject, body]
         if refs:
             cmd += ["--refs", refs]
-        stdout, stderr, code = run_cli(cmd, {"JJ_MAILBOX_REPO": repo, "JJ_MAILBOX_AGENT": agent_name})
+        stdout, stderr, code = run_cli(cmd, env={"JJ_MAILBOX_REPO": repo, "JJ_MAILBOX_AGENT": agent_name}, check=False)
         if code != 0:
             return f"Error sending message: {stderr}"
         lines = [l for l in stdout.splitlines() if l.strip()]
@@ -138,7 +113,8 @@ def execute_tool(name, args, agent_name, repo):
     elif name == "read_inbox":
         stdout, stderr, code = run_cli(
             [BIN, "read", agent_name],
-            {"JJ_MAILBOX_REPO": repo, "JJ_MAILBOX_AGENT": agent_name},
+            env={"JJ_MAILBOX_REPO": repo, "JJ_MAILBOX_AGENT": agent_name},
+            check=False,
         )
         if not stdout:
             return "Inbox is empty."
@@ -373,7 +349,7 @@ def main():
             for f in files:
                 if not f.startswith("."):
                     print(f"{indent}  {f}")
-        shutil.rmtree(repo, ignore_errors=True)
+        cleanup_repo(repo)
 
 
 if __name__ == "__main__":

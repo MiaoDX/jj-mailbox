@@ -219,10 +219,20 @@ cmd_send() {
   ts="$(ts_filename)"
   local filename="${ts}_${from}_${msg_id}.json"
 
-  # Build refs JSON array from comma-separated ids
+  # Build refs JSON array from comma-separated ids (pure bash, no python)
   local refs_json="[]"
   if [[ -n "${refs_arg}" ]]; then
-    refs_json=$(python3 -c "import json,sys; ids=[x.strip() for x in sys.argv[1].split(',') if x.strip()]; print(json.dumps(ids))" "${refs_arg}")
+    local _refs_arr _r _first=true
+    refs_json="["
+    IFS=',' read -ra _refs_arr <<< "${refs_arg}"
+    for _r in "${_refs_arr[@]}"; do
+      _r="${_r// /}"
+      [[ -z "${_r}" ]] && continue
+      ${_first} || refs_json+=","
+      refs_json+="\"${_r}\""
+      _first=false
+    done
+    refs_json+="]"
   fi
 
   cat > "inbox/${to}/new/${filename}" <<EOF
@@ -275,10 +285,15 @@ cmd_inbox() {
 
   # Sort by filename (which starts with timestamp)
   find "${inbox_dir}" -name '*.json' | sort | while read -r f; do
-    local from subject ts
-    from=$(python3 -c "import json; print(json.load(open('${f}'))['from'])" 2>/dev/null || echo "?")
-    subject=$(python3 -c "import json; print(json.load(open('${f}'))['subject'])" 2>/dev/null || echo "?")
-    ts=$(python3 -c "import json; print(json.load(open('${f}'))['timestamp'])" 2>/dev/null || echo "?")
+    local from subject ts _fields
+    # Single python3 call to extract all fields (instead of 3 separate calls)
+    # Uses sys.argv to pass file path safely (no bash variable interpolation in python)
+    _fields=$(python3 -c "
+import json,sys
+m=json.load(open(sys.argv[1]))
+print(m.get('from','?') + '\t' + m.get('subject','?') + '\t' + m.get('timestamp','?'))
+" "$f" 2>/dev/null) || _fields=$'?\t?\t?'
+    IFS=$'\t' read -r from subject ts <<< "${_fields}"
     echo -e "  ${GREEN}From:${NC} ${from}  ${BLUE}Subject:${NC} ${subject}  ${YELLOW}Time:${NC} ${ts}"
   done
   echo ""
@@ -330,13 +345,15 @@ cmd_sync() {
     local agent
     agent="$(get_agent)"
     if [[ -f "agents/${agent}/status.json" ]]; then
+      # Pass file path and timestamp as arguments (no bash variable interpolation in python)
       python3 -c "
-import json
-with open('agents/${agent}/status.json', 'r+') as f:
+import json,sys
+path, ts = sys.argv[1], sys.argv[2]
+with open(path, 'r+') as f:
     s = json.load(f)
-    s['last_seen'] = '$(ts_iso)'
+    s['last_seen'] = ts
     f.seek(0); json.dump(s, f, indent=2); f.truncate()
-" 2>/dev/null || true
+" "agents/${agent}/status.json" "$(ts_iso)" 2>/dev/null || true
     fi
 
     # Fetch
@@ -381,8 +398,14 @@ cmd_status() {
     local inbox_count=0
 
     if [[ -f "${agent_dir}/status.json" ]]; then
-      status=$(python3 -c "import json; print(json.load(open('${agent_dir}/status.json'))['status'])" 2>/dev/null || echo "?")
-      last_seen=$(python3 -c "import json; print(json.load(open('${agent_dir}/status.json'))['last_seen'])" 2>/dev/null || echo "?")
+      # Single python3 call to extract both fields (instead of 2 separate calls)
+      local _status_fields
+      _status_fields=$(python3 -c "
+import json,sys
+s=json.load(open(sys.argv[1]))
+print(s.get('status','?'), s.get('last_seen','?'))
+" "${agent_dir}/status.json" 2>/dev/null) || _status_fields="? ?"
+      read -r status last_seen <<< "${_status_fields}"
     fi
 
     if [[ -d "inbox/${name}/new" ]]; then

@@ -16,7 +16,6 @@ import os
 import shutil
 import subprocess
 import sys
-import tempfile
 import time
 from dataclasses import dataclass, field
 from typing import List, Optional
@@ -25,6 +24,10 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 REPO_ROOT = os.path.dirname(os.path.dirname(SCRIPT_DIR))
 BIN = os.path.join(REPO_ROOT, "bin", "jj-mailbox")
 OUTPUT_MD = os.path.join(os.path.dirname(os.path.dirname(SCRIPT_DIR)), "build", "COMPARISON.md")
+
+# Import shared helpers
+sys.path.insert(0, os.path.join(SCRIPT_DIR, ".."))
+from _helpers import setup_repo as _setup_repo, send_message, cleanup_repo
 
 
 # =============================================================================
@@ -141,29 +144,15 @@ def run_slack_scenario():
 
 def run_jj_mailbox_scenario():
     """Execute SCRIPT using jj-mailbox CLI. Return metrics."""
-    repo = tempfile.mkdtemp(prefix="jj-mailbox-bench-")
+    repo = _setup_repo(BIN, [(a, "Agent") for a in AGENTS], prefix="jj-mailbox-bench-")
     try:
-        subprocess.run("git config --global user.email ci@test.local 2>/dev/null || true", shell=True, capture_output=True)
-        subprocess.run("git config --global user.name CI 2>/dev/null || true", shell=True, capture_output=True)
-        subprocess.run(f"{BIN} init {repo}", shell=True, check=True, capture_output=True)
-        for agent in AGENTS:
-            subprocess.run(
-                f"JJ_MAILBOX_REPO={repo} {BIN} register {agent} 'Agent'",
-                shell=True, check=True, capture_output=True,
-            )
-
         msg_ids = []
         start = time.time()
 
         for i, (sender, recipient, subject, body, refs_turn) in enumerate(SCRIPT):
             refs = [msg_ids[refs_turn]] if refs_turn is not None and refs_turn < len(msg_ids) else []
-            cmd = f'JJ_MAILBOX_REPO={repo} JJ_MAILBOX_AGENT={sender} {BIN} send {recipient} "{subject}" "{body}"'
-            if refs:
-                cmd += f" --refs {','.join(refs)}"
-            result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
-            lines = [l for l in result.stdout.splitlines() if l.strip()]
-            msg_id = lines[-1] if lines else f"msg-{i}"
-            msg_ids.append(msg_id)
+            msg_id = send_message(BIN, repo, sender, recipient, subject, body, refs=refs or None)
+            msg_ids.append(msg_id or f"msg-{i}")
 
         elapsed = time.time() - start
 
@@ -176,7 +165,7 @@ def run_jj_mailbox_scenario():
 
         # Test: can replay via jj log?
         jj_log = subprocess.run(
-            f"cd {repo} && jj log --no-pager", shell=True, capture_output=True, text=True
+            ["jj", "log", "--no-pager"], capture_output=True, text=True, cwd=repo
         )
         can_replay = jj_log.returncode == 0 and len(jj_log.stdout.strip()) > 0
 
@@ -198,10 +187,9 @@ def run_jj_mailbox_scenario():
 
         # Commit count (jj commit syncs to git backend)
         git_log = subprocess.run(
-            f"cd {repo} && git log --oneline 2>/dev/null | wc -l",
-            shell=True, capture_output=True, text=True,
+            ["git", "log", "--oneline"], capture_output=True, text=True, cwd=repo
         )
-        commit_count = git_log.stdout.strip()
+        commit_count = str(len(git_log.stdout.strip().splitlines())) if git_log.returncode == 0 else "0"
 
         return {
             "backend": "jj-mailbox",
@@ -218,10 +206,10 @@ def run_jj_mailbox_scenario():
             "repo": repo,
         }
     except Exception as e:
-        shutil.rmtree(repo, ignore_errors=True)
+        cleanup_repo(repo)
         raise
     finally:
-        shutil.rmtree(repo, ignore_errors=True)
+        cleanup_repo(repo)
 
 
 # =============================================================================
