@@ -89,8 +89,11 @@ TOOLS = [
 
 def run_cli(cmd, env=None):
     merged = {**os.environ, **(env or {})}
-    result = subprocess.run(cmd, shell=True, capture_output=True, text=True, env=merged)
-    return result.stdout.strip(), result.returncode
+    if isinstance(cmd, list):
+        result = subprocess.run(cmd, capture_output=True, text=True, env=merged)
+    else:
+        result = subprocess.run(cmd, shell=True, capture_output=True, text=True, env=merged)
+    return result.stdout.strip(), result.stderr.strip(), result.returncode
 
 
 def setup_repo():
@@ -122,19 +125,19 @@ def execute_tool(name, args, agent_name, repo):
         subject = args.get("subject", "")
         body = args.get("body", "")
         refs = args.get("refs", "")
-        cmd = f'{BIN} send {to} "{subject}" "{body}"'
+        cmd = [BIN, "send", to, subject, body]
         if refs:
-            cmd += f" --refs {refs}"
-        stdout, code = run_cli(cmd, {"JJ_MAILBOX_REPO": repo, "JJ_MAILBOX_AGENT": agent_name})
+            cmd += ["--refs", refs]
+        stdout, stderr, code = run_cli(cmd, {"JJ_MAILBOX_REPO": repo, "JJ_MAILBOX_AGENT": agent_name})
         if code != 0:
-            return f"Error sending message: {stdout}"
+            return f"Error sending message: {stderr}"
         lines = [l for l in stdout.splitlines() if l.strip()]
         msg_id = lines[-1] if lines else "unknown"
         return f"Message sent. ID: {msg_id}"
 
     elif name == "read_inbox":
-        stdout, code = run_cli(
-            f"{BIN} read {agent_name}",
+        stdout, stderr, code = run_cli(
+            [BIN, "read", agent_name],
             {"JJ_MAILBOX_REPO": repo, "JJ_MAILBOX_AGENT": agent_name},
         )
         if not stdout:
