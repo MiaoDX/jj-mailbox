@@ -9,6 +9,14 @@ Thumbs.db
 .vscode/
 .idea/
 
+# AI assistants
+.claude/
+.gemini
+AGENTS.md
+CLAUDE.md
+GEMINI.md
+context
+
 # Python / uv
 .venv/
 __pycache__/
