@@ -12,39 +12,20 @@ Scenario:
   then polls until Bob replies, and reads the reply.
 """
 import os
-import shutil
-import subprocess
 import sys
-import tempfile
 
 # Resolve paths
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 REPO_ROOT = os.path.dirname(os.path.dirname(SCRIPT_DIR))
 BIN = os.path.join(REPO_ROOT, "bin", "jj-mailbox")
 
+# Import shared helpers
+sys.path.insert(0, os.path.join(SCRIPT_DIR, ".."))
+from _helpers import setup_repo, cleanup_repo
+
 LLM_API_KEY = os.environ.get("LLM_API_KEY", "")
 LLM_API_BASE = os.environ.get("LLM_API_BASE", "https://openrouter.ai/api/v1")
 LLM_MODEL = os.environ.get("LLM_MODEL", "nvidia/nemotron-3-super-120b-a12b:free")
-
-
-def run(cmd, env=None, check=True):
-    merged_env = {**os.environ, **(env or {})}
-    result = subprocess.run(cmd, shell=True, capture_output=True, text=True, env=merged_env)
-    if check and result.returncode != 0:
-        print(f"FAIL: {cmd}\n  {result.stderr.strip()}")
-        sys.exit(1)
-    return result.stdout.strip()
-
-
-def setup_repo():
-    repo = tempfile.mkdtemp(prefix="jj-mailbox-2b-")
-    run(f"git config --global user.email ci@test.local 2>/dev/null || true", check=False)
-    run(f"git config --global user.name CI 2>/dev/null || true", check=False)
-    run(f"{BIN} init {repo}")
-    run(f"JJ_MAILBOX_REPO={repo} {BIN} register alice 'API designer'")
-    run(f"JJ_MAILBOX_REPO={repo} {BIN} register bob 'Code reviewer'")
-    os.makedirs(os.path.join(repo, "shared", "artifacts"), exist_ok=True)
-    return repo
 
 
 def main():
@@ -68,7 +49,7 @@ def main():
 
     from tools import CheckInboxTool, ReadMessageTool, SendMessageTool
 
-    repo = setup_repo()
+    repo = setup_repo(BIN, [("alice", "API designer"), ("bob", "Code reviewer")], prefix="jj-mailbox-2b-")
     print(f"Test repo: {repo}")
     print(f"Model: {LLM_MODEL} @ {LLM_API_BASE}")
     print()
@@ -143,7 +124,7 @@ def main():
         print("=" * 60)
 
     finally:
-        shutil.rmtree(repo, ignore_errors=True)
+        cleanup_repo(repo)
 
 
 if __name__ == "__main__":
