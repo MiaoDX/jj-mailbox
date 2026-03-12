@@ -3,11 +3,9 @@
 LLM tool-calling agent test.
 
 Uses OpenAI function calling so agents invoke jj-mailbox as actual tool calls.
-Skips gracefully if LLM_API_KEY is not set and OLLAMA is not set.
+Skips gracefully if LLM_API_KEY is not set.
 
-Default model: openrouter/free via OpenRouter (auto-routes to best free model)
-Local option:  qwen2.5:0.5b via ollama (set OLLAMA=1)
-See docs/MODEL_CHOICES.md for all provider options.
+Default: openrouter/auto via OpenRouter (auto-routes to best available model).
 
 Scenario: "Code review, 3 rounds"
   Alice proposes a function design
@@ -15,10 +13,6 @@ Scenario: "Code review, 3 rounds"
   Alice incorporates feedback, writes final design to shared/artifacts/
 
 Usage:
-  # Local ollama:
-  OLLAMA=1 python3 tests/llm/test.py
-
-  # OpenRouter:
   LLM_API_KEY=sk-or-... python3 tests/llm/test.py
 """
 import json
@@ -33,17 +27,10 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 REPO_ROOT = os.path.dirname(os.path.dirname(SCRIPT_DIR))
 BIN = os.path.join(REPO_ROOT, "bin", "jj-mailbox")
 
-# Config from environment
-USE_OLLAMA = os.environ.get("OLLAMA", "") not in ("", "0", "false")
-
-if USE_OLLAMA:
-    LLM_API_KEY = os.environ.get("LLM_API_KEY", "ollama")
-    LLM_API_BASE = os.environ.get("LLM_API_BASE", "http://localhost:11434/v1")
-    LLM_MODEL = os.environ.get("LLM_MODEL", "qwen2.5:0.5b")
-else:
-    LLM_API_KEY = os.environ.get("LLM_API_KEY", "")
-    LLM_API_BASE = os.environ.get("LLM_API_BASE", "https://openrouter.ai/api/v1")
-    LLM_MODEL = os.environ.get("LLM_MODEL", "openrouter/free")
+# Config from environment (defaults to OpenRouter)
+LLM_API_KEY = os.environ.get("LLM_API_KEY", "")
+LLM_API_BASE = os.environ.get("LLM_API_BASE", "https://openrouter.ai/api/v1")
+LLM_MODEL = os.environ.get("LLM_MODEL", "openrouter/auto")
 
 MAX_TURNS = 6  # max tool-calling turns per agent per round
 
@@ -231,15 +218,13 @@ def run_agent(agent_name, system_prompt, user_prompt, repo, client, log,
 
 def main():
     print("=" * 60)
-    print("Level 3a: Tool-calling LLM agent (free model)")
+    print("LLM tool-calling agent test")
     print("=" * 60)
 
-    if not LLM_API_KEY and not USE_OLLAMA:
+    if not LLM_API_KEY:
         print()
-        print("⏭  SKIP: LLM_API_KEY not set and OLLAMA not set.")
-        print("   Options:")
-        print("     OLLAMA=1 python3 tests/llm/test.py  # local ollama")
-        print("     LLM_API_KEY=sk-or-... python3 ...  # OpenRouter (free)")
+        print("⏭  SKIP: LLM_API_KEY not set.")
+        print("   LLM_API_KEY=sk-or-... python3 tests/llm/test.py")
         sys.exit(0)
 
     try:
@@ -338,7 +323,7 @@ def main():
 
         print()
         print("=" * 60)
-        print("✅ Level 3a: Tool-calling LLM agent test passed!")
+        print("✅ LLM tool-calling agent test passed!")
         print("=" * 60)
 
     finally:

@@ -1,123 +1,50 @@
 # Model Choices
 
-jj-mailbox is **model-pluggable** — any OpenAI-compatible API works.
-All tests and demos accept the same three environment variables:
+jj-mailbox uses **OpenRouter** for all LLM tests. One API key, one provider.
 
 ```bash
-LLM_API_KEY=...                          # your API key
-LLM_API_BASE=https://openrouter.ai/api/v1  # provider endpoint
-LLM_MODEL=openrouter/auto               # model ID
+LLM_API_KEY=sk-or-...                      # OpenRouter API key
+LLM_API_BASE=https://openrouter.ai/api/v1  # (default, can omit)
+LLM_MODEL=openrouter/auto                  # (default, can omit)
 ```
 
-## Recommended Providers (Free Tier)
+## OpenRouter
 
-| Provider | Base URL | Recommended Model | Daily Limit | Tool Calling | Signup |
-|----------|----------|-------------------|-------------|:------------:|--------|
-| **OpenRouter** | `https://openrouter.ai/api/v1` | `openrouter/auto` | 50 req (1K with $10) | Yes | No card |
-| **Groq** | `https://api.groq.com/openai/v1` | `llama-3.3-70b-versatile` | 1K req | Yes | No card |
-| **Cerebras** | `https://api.cerebras.ai/v1` | `llama-3.3-70b` | 1M tokens | Yes | No card |
-| **Google AI Studio** | `https://generativelanguage.googleapis.com/v1beta/openai/` | `gemini-2.5-flash` | 250 req | Yes | No card |
+Sign up at https://openrouter.ai/ — no credit card needed.
 
-### OpenRouter (default)
+The `openrouter/auto` meta-model auto-routes to the best available model for your request
+(including tool calling). ~27 free models available including Qwen3, GPT-OSS, Llama 4,
+DeepSeek R1.
 
-The best starting point. The `openrouter/auto` meta-model auto-routes to whichever free model supports your request (including tool calling). ~27 free models available including Qwen3, GPT-OSS, Llama 4, DeepSeek R1.
+- Free tier: 20 RPM, 50 req/day
+- One-time $10 purchase: 1K req/day permanently
+- Browse free models: https://openrouter.ai/collections/free-models
+
+## Setup
 
 ```bash
-# Sign up at https://openrouter.ai/ — no credit card needed
-LLM_API_KEY=sk-or-...
-LLM_API_BASE=https://openrouter.ai/api/v1
-LLM_MODEL=openrouter/auto
+# 1. Get your key at https://openrouter.ai/settings/keys
+# 2. Add to .env at project root:
+echo 'LLM_API_KEY=sk-or-...' >> .env
+
+# 3. Run any LLM test:
+python3 tests/llm/test.py
+python3 tests/smolagents/test.py
 ```
-
-Free tier: 20 RPM, 50 req/day. One-time $10 purchase unlocks 1K req/day permanently.
-
-Browse free models: https://openrouter.ai/collections/free-models
-
-### Groq
-
-Fastest inference (~300 tok/s on LPU hardware). Llama 3.3 70B is strong at tool calling.
-
-```bash
-# Sign up at https://console.groq.com/ — no credit card needed
-LLM_API_KEY=gsk_...
-LLM_API_BASE=https://api.groq.com/openai/v1
-LLM_MODEL=llama-3.3-70b-versatile
-```
-
-Free tier: 30 RPM, 1K req/day, 12K TPM.
-
-### Cerebras
-
-Most generous free limits. ~20x faster than GPU inference on wafer-scale hardware.
-
-```bash
-# Sign up at https://cloud.cerebras.ai/ — no credit card needed
-LLM_API_KEY=csk-...
-LLM_API_BASE=https://api.cerebras.ai/v1
-LLM_MODEL=llama-3.3-70b
-```
-
-Free tier: 30 RPM, 1M tokens/day, 14.4K req/day. Context limited to 8K on free tier.
-
-### Google AI Studio
-
-Highest model quality among free providers. Gemini 2.5 Flash rivals frontier models.
-
-```bash
-# Get API key at https://aistudio.google.com/apikey — no credit card needed
-LLM_API_KEY=AIza...
-LLM_API_BASE=https://generativelanguage.googleapis.com/v1beta/openai/
-LLM_MODEL=gemini-2.5-flash
-```
-
-Free tier: 10 RPM, 250 req/day.
-
-### Local (Ollama)
-
-Zero cost, fully offline. Needs a machine with enough RAM for the model.
-
-```bash
-# Install: https://ollama.ai/ then: ollama pull qwen2.5:7b
-LLM_API_KEY=ollama
-LLM_API_BASE=http://localhost:11434/v1
-LLM_MODEL=qwen2.5:7b
-OLLAMA=1
-```
-
-## Switching Providers
-
-All providers use the same OpenAI-compatible interface, so switching is just env vars:
-
-```bash
-# Run any test with any provider
-LLM_API_KEY=gsk_... LLM_API_BASE=https://api.groq.com/openai/v1 LLM_MODEL=llama-3.3-70b-versatile \
-  python3 tests/llm/test.py
-```
-
-The same applies to the OpenClaw integration test, CI workflows, and demos.
 
 ## For CI
 
-Add one secret to your GitHub repo settings (`Settings → Secrets → Actions`):
+Add one secret to GitHub repo settings (`Settings → Secrets → Actions`):
 
-| Secret | Used by | Required? |
-|--------|---------|-----------|
-| `LLM_API_KEY` | smolagents, llm, OpenClaw tests | For LLM tests |
+| Secret | Used by |
+|--------|---------|
+| `LLM_API_KEY` | smolagents, llm, OpenClaw tests |
 
-One key covers all LLM-based tests. Set `LLM_API_BASE` and `LLM_MODEL` in the workflow if you want a specific provider (defaults to OpenRouter).
+That's it. One key covers everything.
 
----
+## Other Providers
 
-<!-- Sponsors -->
+The codebase uses the OpenAI-compatible API format, so other providers could work
+by overriding `LLM_API_BASE` and `LLM_MODEL`. See GitHub issues for tracking:
 
-## Sponsors
-
-_This section is reserved for providers and organizations supporting jj-mailbox development and CI infrastructure._
-
-_Interested in sponsoring? See [CONTRIBUTING.md](../CONTRIBUTING.md)._
-
-<!--
-Sponsor tiers:
-- Provide free API credits for CI → logo + link here
-- Maintain a free model tier used by our tests → mention here
--->
+- Groq, Cerebras, Google AI Studio, Ollama — tracked as future enhancements
