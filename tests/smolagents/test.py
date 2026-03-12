@@ -24,7 +24,7 @@ BIN = os.path.join(REPO_ROOT, "bin", "jj-mailbox")
 
 LLM_API_KEY = os.environ.get("LLM_API_KEY", "")
 LLM_API_BASE = os.environ.get("LLM_API_BASE", "https://openrouter.ai/api/v1")
-LLM_MODEL = os.environ.get("LLM_MODEL", "openrouter/auto")
+LLM_MODEL = os.environ.get("LLM_MODEL", "openrouter/free")
 
 
 def run(cmd, env=None, check=True):

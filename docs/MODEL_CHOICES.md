@@ -5,14 +5,14 @@ jj-mailbox uses **OpenRouter** for all LLM tests. One API key, one provider.
 ```bash
 LLM_API_KEY=sk-or-...                      # OpenRouter API key
 LLM_API_BASE=https://openrouter.ai/api/v1  # (default, can omit)
-LLM_MODEL=openrouter/auto                  # (default, can omit)
+LLM_MODEL=openrouter/free                  # (default, can omit)
 ```
 
 ## OpenRouter
 
 Sign up at https://openrouter.ai/ — no credit card needed.
 
-The `openrouter/auto` meta-model auto-routes to the best available model for your request
+The `openrouter/free` meta-model auto-routes to the best available model for your request
 (including tool calling). ~27 free models available including Qwen3, GPT-OSS, Llama 4,
 DeepSeek R1.
 

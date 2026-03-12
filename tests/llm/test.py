@@ -5,7 +5,7 @@ LLM tool-calling agent test.
 Uses OpenAI function calling so agents invoke jj-mailbox as actual tool calls.
 Skips gracefully if LLM_API_KEY is not set.
 
-Default: openrouter/auto via OpenRouter (auto-routes to best available model).
+Default: openrouter/free via OpenRouter (auto-routes to best available model).
 
 Scenario: "Code review, 3 rounds"
   Alice proposes a function design
@@ -30,7 +30,7 @@ BIN = os.path.join(REPO_ROOT, "bin", "jj-mailbox")
 # Config from environment (defaults to OpenRouter)
 LLM_API_KEY = os.environ.get("LLM_API_KEY", "")
 LLM_API_BASE = os.environ.get("LLM_API_BASE", "https://openrouter.ai/api/v1")
-LLM_MODEL = os.environ.get("LLM_MODEL", "openrouter/auto")
+LLM_MODEL = os.environ.get("LLM_MODEL", "openrouter/free")
 
 MAX_TURNS = 6  # max tool-calling turns per agent per round
 
