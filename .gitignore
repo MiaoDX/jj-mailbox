@@ -21,6 +21,9 @@ context
 .venv/
 __pycache__/
 
+# Generated
+tests/comparison/COMPARISON.md
+
 # Temp
 *.tmp
 
