@@ -139,8 +139,8 @@ jobs:
           echo "Turn 2 id: $MSG2_ID"
           test -n "$MSG2_ID"
 
-          # Verify msg2 has refs=[msg1_id]
-          MSG2_FILE=$(find inbox/alice/new -name '*.json' | sort | tail -1)
+          # Verify msg2 has refs=[msg1_id] (find by msg ID, not sort order — timestamps have only second precision)
+          MSG2_FILE=$(find inbox/alice/new -name "*${MSG2_ID}*")
           MSG2_REFS=$(python3 -c "import json; print(json.load(open('$MSG2_FILE'))['refs'])")
           echo "Turn 2 refs: $MSG2_REFS"
           python3 -c "import json; data=json.load(open('$MSG2_FILE')); refs=data['refs']; assert '$MSG1_ID' in refs, f'msg2 refs missing msg1: {refs}'"
@@ -150,8 +150,8 @@ jobs:
           MSG3_ID=$(JJ_MAILBOX_AGENT=alice $GITHUB_WORKSPACE/bin/jj-mailbox send bob "Re: Cache design" "Confirmed. Writing design doc." --refs "$MSG2_ID" | tail -1)
           echo "Turn 3 id: $MSG3_ID"
 
-          # Verify msg3 has refs=[msg2_id]
-          MSG3_FILE=$(find inbox/bob/new -name '*.json' | sort | tail -1)
+          # Verify msg3 has refs=[msg2_id] (find by msg ID, not sort order)
+          MSG3_FILE=$(find inbox/bob/new -name "*${MSG3_ID}*")
           python3 -c "import json; data=json.load(open('$MSG3_FILE')); refs=data['refs']; assert '$MSG2_ID' in refs, f'msg3 refs missing msg2: {refs}'"
 
           # Read turn 3 to move to processed
