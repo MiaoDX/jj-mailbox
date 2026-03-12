@@ -133,7 +133,7 @@ Thumbs.db
 *.swp
 GI
 
-  jj describe -m "Initialize jj-mailbox repo"
+  jj commit -m "Initialize jj-mailbox repo"
 
   ok "Mailbox repo initialized at: $(pwd)"
   if [[ -z "${remote}" ]]; then
@@ -177,7 +177,7 @@ EOF
   touch "inbox/${name}/new/.gitkeep"
   touch "inbox/${name}/processed/.gitkeep"
 
-  jj describe -m "Register agent: ${name}"
+  jj commit -m "Register agent: ${name}"
 
   ok "Agent '${name}' registered."
   log "Set JJ_MAILBOX_AGENT=${name} to use as current agent."
@@ -240,7 +240,7 @@ cmd_send() {
 }
 EOF
 
-  jj describe -m "${from} → ${to}: ${subject}"
+  jj commit -m "${from} → ${to}: ${subject}"
 
   ok "Message sent: ${from} → ${to}"
   log "  Subject: ${subject}"

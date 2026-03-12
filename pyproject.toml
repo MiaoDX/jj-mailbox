@@ -1,0 +1,15 @@
+[project]
+name = "jj-mailbox"
+version = "0.1.0"
+description = "Maildir for AI agents — version-controlled message passing powered by jj"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.10"
+
+[tool.uv]
+default-groups = ["test"]
+
+[dependency-groups]
+test-llm = ["openai"]
+test-smolagents = ["smolagents[openai]>=1.0.0"]
+test = [{include-group = "test-llm"}, {include-group = "test-smolagents"}]

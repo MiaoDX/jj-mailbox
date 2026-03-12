@@ -196,7 +196,7 @@ def run_jj_mailbox_scenario():
                     pass
         ordering_guarantee = True  # filenames are timestamp-prefixed
 
-        # Commit hash count
+        # Commit count (jj commit syncs to git backend)
         git_log = subprocess.run(
             f"cd {repo} && git log --oneline 2>/dev/null | wc -l",
             shell=True, capture_output=True, text=True,

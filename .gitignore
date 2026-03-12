@@ -9,6 +9,10 @@ Thumbs.db
 .vscode/
 .idea/
 
+# Python / uv
+.venv/
+__pycache__/
+
 # Temp
 *.tmp
 

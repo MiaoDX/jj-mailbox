@@ -1,7 +1,10 @@
 name: Demo - LLM Agent Conversation
 
-# Manual trigger only - this costs API credits
 on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
     inputs:
       preset:
@@ -37,10 +40,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Check LLM_API_KEY
+        run: |
+          if [ -z "$LLM_API_KEY" ]; then
+            echo "::error::LLM_API_KEY secret is not set — cannot run LLM demo"
+            exit 1
+          fi
+
       - name: Resolve model preset
         id: model
         run: |
-          case "${{ inputs.preset }}" in
+          PRESET="${{ inputs.preset }}"
+          PRESET="${PRESET:-mimo-free}"
+          case "$PRESET" in
             mimo-free)
               # MiMo-V2-Flash via OpenRouter — completely free
               echo "api_base=https://openrouter.ai/api/v1" >> $GITHUB_OUTPUT
@@ -211,8 +223,10 @@ jobs:
           LLM_API_BASE: ${{ steps.model.outputs.api_base }}
           LLM_MODEL: ${{ steps.model.outputs.model }}
         run: |
-          echo "🤖 Using: ${{ steps.model.outputs.label }}"
-          python3 /tmp/agent-chat.py "${{ inputs.task }}" 3
+          TASK="${{ inputs.task }}"
+          TASK="${TASK:-Design a simple REST API for a todo app. Alice designs the endpoints, Bob reviews and suggests improvements.}"
+          echo "Using: ${{ steps.model.outputs.label }}"
+          python3 /tmp/agent-chat.py "$TASK" 3
 
       - name: Show jj history
         run: |

@@ -69,12 +69,11 @@ jobs:
             echo "LLM_API_KEY not set — skipping"
           fi
 
-      - name: Install openai
-        if: steps.check_key.outputs.has_key == 'true'
-        run: pip install openai
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
 
       - name: Run LLM test (${{ matrix.model }})
-        run: python3 tests/llm/test.py
+        run: uv run --group test-llm python3 tests/llm/test.py
 
       - name: Upload conversation log
         if: steps.check_key.outputs.has_key == 'true'

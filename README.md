@@ -1,6 +1,12 @@
 # 📬 jj-mailbox
 
-[![CI](https://github.com/MiaoDX/jj-mailbox/actions/workflows/ci.yml/badge.svg)](https://github.com/MiaoDX/jj-mailbox/actions/workflows/ci.yml)
+[![Core Tests](https://github.com/MiaoDX/jj-mailbox/actions/workflows/ci.yml/badge.svg)](https://github.com/MiaoDX/jj-mailbox/actions/workflows/ci.yml)
+[![Scripted Agents](https://github.com/MiaoDX/jj-mailbox/actions/workflows/ci-scripted.yml/badge.svg)](https://github.com/MiaoDX/jj-mailbox/actions/workflows/ci-scripted.yml)
+[![LLM Tool-Calling](https://github.com/MiaoDX/jj-mailbox/actions/workflows/ci-llm.yml/badge.svg)](https://github.com/MiaoDX/jj-mailbox/actions/workflows/ci-llm.yml)
+[![smolagents](https://github.com/MiaoDX/jj-mailbox/actions/workflows/ci-smolagents.yml/badge.svg)](https://github.com/MiaoDX/jj-mailbox/actions/workflows/ci-smolagents.yml)
+[![OpenClaw](https://github.com/MiaoDX/jj-mailbox/actions/workflows/ci-openclaw.yml/badge.svg)](https://github.com/MiaoDX/jj-mailbox/actions/workflows/ci-openclaw.yml)
+[![Comparison](https://github.com/MiaoDX/jj-mailbox/actions/workflows/ci-comparison.yml/badge.svg)](https://github.com/MiaoDX/jj-mailbox/actions/workflows/ci-comparison.yml)
+[![LLM Demo](https://github.com/MiaoDX/jj-mailbox/actions/workflows/demo-llm.yml/badge.svg)](https://github.com/MiaoDX/jj-mailbox/actions/workflows/demo-llm.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 **Maildir for AI agents — version-controlled message passing powered by [jj](https://github.com/jj-vcs/jj).**

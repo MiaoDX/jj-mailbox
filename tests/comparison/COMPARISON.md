@@ -1,6 +1,6 @@
 # Slack-style vs jj-mailbox Comparison
 
-> Generated: 2026-03-12T08:00:45Z
+> Generated: 2026-03-12T09:08:02Z
 
 ## Scenario
 
@@ -13,7 +13,7 @@
 | Metric | Slack-style | jj-mailbox |
 |--------|------------|------------|
 | Messages delivered | 8 | 8 |
-| Elapsed (ms) | 0.0 | 327.9 |
+| Elapsed (ms) | 0.0 | 310.1 |
 
 ## Capability Comparison
 
@@ -28,7 +28,7 @@
 
 ## jj-mailbox Audit Trail
 
-Git commits created: **0**
+Git commits created: **12**
 
 Each message send creates a jj commit, providing:
 - Immutable message history

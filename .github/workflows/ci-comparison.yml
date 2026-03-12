@@ -1,6 +1,10 @@
 name: CI - Comparison Benchmark
 
 on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
   workflow_dispatch: {}
   schedule:
     # Weekly on Monday 06:00 UTC
