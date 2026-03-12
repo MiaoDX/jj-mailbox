@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Two AI agents having a real conversation via jj-mailbox.
 
-Uses any OpenAI-compatible API (OpenRouter, Kimi, local models, etc.).
+Uses any OpenAI-compatible API (OpenRouter, local models, etc.).
 
 Usage:
     # Set your API key and run
@@ -10,7 +10,7 @@ Usage:
 
     # Optional: configure API endpoint and model
     export LLM_API_BASE="https://openrouter.ai/api/v1"  # default
-    export LLM_MODEL="xiaomi/mimo-v2-flash:free"         # default (free)
+    export LLM_MODEL="nvidia/nemotron-3-super-120b-a12b:free"  # default (free)
 
     python3 agent_chat.py "Design a REST API for a todo app" 3
 """
@@ -20,7 +20,7 @@ import json, sys, os, glob, urllib.request
 
 API_KEY = os.environ["LLM_API_KEY"]
 API_BASE = os.environ.get("LLM_API_BASE", "https://openrouter.ai/api/v1")
-MODEL = os.environ.get("LLM_MODEL", "xiaomi/mimo-v2-flash:free")
+MODEL = os.environ.get("LLM_MODEL", "nvidia/nemotron-3-super-120b-a12b:free")
 REPO = os.environ.get("JJ_MAILBOX_REPO", "/tmp/demo")
 
 

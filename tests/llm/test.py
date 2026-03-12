@@ -5,7 +5,7 @@ LLM tool-calling agent test.
 Uses OpenAI function calling so agents invoke jj-mailbox as actual tool calls.
 Skips gracefully if LLM_API_KEY is not set.
 
-Default: openrouter/free via OpenRouter (auto-routes to best available model).
+Default: nvidia/nemotron-3-super-120b-a12b:free via OpenRouter.
 
 Scenario: "Code review, 3 rounds"
   Alice proposes a function design
@@ -31,7 +31,7 @@ BIN = os.path.join(REPO_ROOT, "bin", "jj-mailbox")
 # Config from environment (defaults to OpenRouter)
 LLM_API_KEY = os.environ.get("LLM_API_KEY", "")
 LLM_API_BASE = os.environ.get("LLM_API_BASE", "https://openrouter.ai/api/v1")
-LLM_MODEL = os.environ.get("LLM_MODEL", "openrouter/free")
+LLM_MODEL = os.environ.get("LLM_MODEL", "nvidia/nemotron-3-super-120b-a12b:free")
 
 MAX_TURNS = 6  # max tool-calling turns per agent per round
 
@@ -196,7 +196,11 @@ def run_agent(agent_name, system_prompt, user_prompt, repo, client, log):
                 msg = f"SKIP: Model {LLM_MODEL} not available — 404"
                 print(f"  [{agent_name}] {msg}")
                 raise GracefulSkip(msg)
-            except openai.APIError as e:
+            except openai.APIStatusError as e:
+                if e.status_code == 402:
+                    msg = f"SKIP: {LLM_MODEL} — 402 payment/limit exceeded"
+                    print(f"  [{agent_name}] {msg}")
+                    raise GracefulSkip(msg)
                 print(f"  [{agent_name}] API error: {e}")
                 raise
         if not response.choices:
@@ -226,6 +230,10 @@ def run_agent(agent_name, system_prompt, user_prompt, repo, client, log):
             except json.JSONDecodeError:
                 # Some free models emit malformed JSON; try to salvage
                 args = {}
+            # Some free models return args as a list instead of dict
+            if not isinstance(args, dict):
+                print(f"  [{agent_name}] Malformed tool args (got {type(args).__name__}), skipping")
+                args = {}
             result = execute_tool(tc.function.name, args, agent_name, repo)
             print(f"  [{agent_name}] tool: {tc.function.name}({args}) → {result[:80]}")
             log.append({"agent": agent_name, "type": "tool_call", "tool": tc.function.name, "args": args, "result": result})
@@ -245,9 +253,9 @@ def main():
 
     if not LLM_API_KEY:
         print()
-        print("⏭  SKIP: LLM_API_KEY not set.")
+        print("ERROR: LLM_API_KEY not set.")
         print("   LLM_API_KEY=sk-or-... python3 tests/llm/test.py")
-        sys.exit(0)
+        sys.exit(1)
 
     try:
         import openai

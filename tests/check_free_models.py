@@ -43,8 +43,7 @@ def main():
     print(f"Checking {len(wanted)} models from {MODELS_FILE}")
     print()
 
-    # openrouter/free is a meta-model, always free by definition
-    skip = {"openrouter/free"}
+    skip = set()
 
     catalog = fetch_openrouter_models()
     by_id = {m["id"]: m for m in catalog}

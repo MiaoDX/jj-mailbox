@@ -105,7 +105,7 @@ Every push runs core CLI tests (no LLM needed):
 
 [![CI](https://github.com/MiaoDX/jj-mailbox/actions/workflows/ci.yml/badge.svg)](https://github.com/MiaoDX/jj-mailbox/actions/workflows/ci.yml)
 
-There's also a live LLM demo workflow you can trigger manually — two agents have a real conversation via jj-mailbox, powered by [MiMo-V2-Flash](https://github.com/XiaomiMiMo/MiMo-V2-Flash) (free via OpenRouter) or Kimi:
+There's also a live LLM demo workflow you can trigger manually — two agents have a real conversation via jj-mailbox, powered by [Nemotron 3 Super](https://openrouter.ai/nvidia/nemotron-3-super-120b-a12b:free) (free via OpenRouter):
 
 [![Demo](https://github.com/MiaoDX/jj-mailbox/actions/workflows/demo-llm.yml/badge.svg)](https://github.com/MiaoDX/jj-mailbox/actions/workflows/demo-llm.yml)
 

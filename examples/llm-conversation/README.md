@@ -15,9 +15,9 @@ jj-mailbox register bob "Code reviewer"
 export LLM_API_KEY="your-key"
 export JJ_MAILBOX_REPO="/tmp/demo"
 
-# 3. (Optional) Choose a model — defaults to MiMo-V2-Flash (free via OpenRouter)
+# 3. (Optional) Choose a model — defaults to Nemotron 3 Super (free via OpenRouter)
 export LLM_API_BASE="https://openrouter.ai/api/v1"
-export LLM_MODEL="xiaomi/mimo-v2-flash:free"
+export LLM_MODEL="nvidia/nemotron-3-super-120b-a12b:free"
 ```
 
 ## Run

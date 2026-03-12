@@ -73,6 +73,7 @@ jobs:
         uses: astral-sh/setup-uv@v4
 
       - name: Run LLM test (${{ matrix.model }})
+        if: steps.check_key.outputs.has_key == 'true'
         run: uv run --group test-llm python3 tests/llm/test.py
 
       - name: Upload conversation log

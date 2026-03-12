@@ -10,11 +10,10 @@ on:
       preset:
         description: 'Model preset (or choose custom)'
         required: false
-        default: 'mimo-free'
+        default: 'nemotron-free'
         type: choice
         options:
-          - mimo-free
-          - kimi
+          - nemotron-free
           - custom
       api_base:
         description: 'Custom API base URL (only for preset=custom)'
@@ -24,7 +23,7 @@ on:
       model:
         description: 'Custom model name (only for preset=custom)'
         required: false
-        default: 'xiaomi/mimo-v2-flash:free'
+        default: 'nvidia/nemotron-3-super-120b-a12b:free'
         type: string
       task:
         description: 'Collaboration task for the agents'
@@ -51,19 +50,13 @@ jobs:
         id: model
         run: |
           PRESET="${{ inputs.preset }}"
-          PRESET="${PRESET:-mimo-free}"
+          PRESET="${PRESET:-nemotron-free}"
           case "$PRESET" in
-            mimo-free)
-              # MiMo-V2-Flash via OpenRouter — completely free
+            nemotron-free)
+              # NVIDIA Nemotron 3 Super via OpenRouter — completely free
               echo "api_base=https://openrouter.ai/api/v1" >> $GITHUB_OUTPUT
-              echo "model=xiaomi/mimo-v2-flash:free" >> $GITHUB_OUTPUT
-              echo "label=MiMo-V2-Flash (free via OpenRouter)" >> $GITHUB_OUTPUT
-              ;;
-            kimi)
-              # Moonshot Kimi
-              echo "api_base=https://api.moonshot.cn/v1" >> $GITHUB_OUTPUT
-              echo "model=moonshot-v1-8k" >> $GITHUB_OUTPUT
-              echo "label=Kimi (moonshot-v1-8k)" >> $GITHUB_OUTPUT
+              echo "model=nvidia/nemotron-3-super-120b-a12b:free" >> $GITHUB_OUTPUT
+              echo "label=Nemotron 3 Super (free via OpenRouter)" >> $GITHUB_OUTPUT
               ;;
             custom)
               echo "api_base=${{ inputs.api_base }}" >> $GITHUB_OUTPUT
@@ -95,8 +88,8 @@ jobs:
           import json, sys, os, glob, urllib.request
 
           API_KEY = os.environ["LLM_API_KEY"]
-          API_BASE = os.environ.get("LLM_API_BASE", "https://api.moonshot.cn/v1")
-          MODEL = os.environ.get("LLM_MODEL", "moonshot-v1-8k")
+          API_BASE = os.environ.get("LLM_API_BASE", "https://openrouter.ai/api/v1")
+          MODEL = os.environ.get("LLM_MODEL", "nvidia/nemotron-3-super-120b-a12b:free")
           REPO = os.environ.get("JJ_MAILBOX_REPO", "/tmp/demo")
 
           def llm_chat(system_prompt, user_message):

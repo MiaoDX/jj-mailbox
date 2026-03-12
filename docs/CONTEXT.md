@@ -116,7 +116,7 @@ Natural evolution from "embedded IPC" to "agent IPC" — the DataLayer repo is t
 1. **Slack before**: Existing two Claws conversing in Slack (have records)
 2. **jj-mailbox after**: Same task completed with jj-mailbox
 3. **Terminal GIF**: Split-screen comparison
-4. **CI LLM demo**: Two agents using MiMo/Kimi in GitHub Actions
+4. **CI LLM demo**: Two agents using free OpenRouter models in GitHub Actions
 
 ## Completed File Checklist
 
@@ -130,7 +130,7 @@ Natural evolution from "embedded IPC" to "agent IPC" — the DataLayer repo is t
 | `docker/docker-compose.yml` | 109 | ✅ Done |
 | `docker/Dockerfile` | 33 | ✅ Done |
 | `.github/workflows/ci.yml` | ~150 | ✅ Done (auto-runs on push, no API key needed) |
-| `.github/workflows/demo-llm.yml` | ~243 | ✅ Done (manual trigger, supports MiMo-free/Kimi/custom) |
+| `.github/workflows/demo-llm.yml` | ~243 | ✅ Done (manual trigger, supports Nemotron-free/custom) |
 | `LICENSE` | MIT | ✅ |
 | `.gitignore` | - | ✅ |
 
@@ -142,12 +142,10 @@ Auto-runs on every push, tests: init → register → send → inbox → read �
 ### demo-llm.yml (manual trigger, requires secret)
 Add `LLM_API_KEY` in repo Settings → Secrets → Actions
 
-Three presets:
-- `mimo-free` (default): MiMo-V2-Flash via OpenRouter, completely free
+Two presets:
+- `nemotron-free` (default): Nemotron 3 Super via OpenRouter, completely free
   - API base: https://openrouter.ai/api/v1
-  - Model: xiaomi/mimo-v2-flash:free
-- `kimi`: moonshot-v1-8k
-  - API base: https://api.moonshot.cn/v1
+  - Model: nvidia/nemotron-3-super-120b-a12b:free
 - `custom`: Any OpenAI-compatible API
 
 ## Key Reference Links
@@ -158,6 +156,6 @@ Three presets:
 - OpenClaw skills docs: https://docs.openclaw.ai/tools/skills
 - ClawHub: https://docs.openclaw.ai/tools/clawhub
 - Claude Code Agent Teams architecture: https://nwyin.com/blogs/claude-code-agent-teams-reverse-engineered.html
-- MiMo-V2-Flash (free): https://openrouter.ai/xiaomi/mimo-v2-flash:free
+- Nemotron 3 Super (free): https://openrouter.ai/nvidia/nemotron-3-super-120b-a12b:free
 - openclaw-a2a: https://github.com/n00n0i/openclaw-a2a
 - Maildir pattern: https://en.wikipedia.org/wiki/Maildir
