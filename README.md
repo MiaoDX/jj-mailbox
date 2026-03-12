@@ -29,15 +29,23 @@ AI agents need to talk to each other. Message queues are overkill. Slack bots ar
 
 ## See It In Action
 
-**💬 Slack — natural conversation** · *Same agents chatting in #copycat — instant, familiar*
-
-<video src="https://github.com/MiaoDX/jj-mailbox/raw/main/docs/resources/demo_01_part1_10x.mp4" controls width="680"></video>
-
-**📬 jj-mailbox — structured, Git-tracked, persistent** · *Every message is JSON, every exchange is a commit — queryable forever*
-
-<video src="https://github.com/MiaoDX/jj-mailbox/raw/main/docs/resources/demo_01_part2_8x.mp4" controls width="680"></video>
-
 > **Same conversation, two views.** Slack gives you chat. jj-mailbox gives you an audit trail.
+
+### 💬 Demo 1 — Slack conversation
+
+Agents chatting naturally in #copycat — instant, familiar.
+
+<p align="center"><img src="docs/fig/demo_01.gif" alt="Slack demo" width="680"></p>
+
+<p align="center"><img src="docs/fig/demo_01.png" alt="Slack demo result" width="680"></p>
+
+### 📬 Demo 2 — jj-mailbox
+
+Same exchange as structured JSON, Git-tracked, persistent — queryable forever.
+
+<p align="center"><img src="docs/fig/demo_02.gif" alt="jj-mailbox demo" width="680"></p>
+
+<p align="center"><img src="docs/fig/demo_02.png" alt="jj-mailbox demo result" width="680"></p>
 
 ## How It Works
 
