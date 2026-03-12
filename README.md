@@ -13,15 +13,9 @@
 
 AI agents need to talk to each other. Message queues are overkill. Slack bots are fragile. jj-mailbox is the Unix way: **write a file, commit, push. Done.**
 
-```bash
-# Alice sends a message to Bob
-jj-mailbox send bob "Research done" "Found 3 approaches, recommend Option B."
-
-# Bob checks his inbox
-jj-mailbox inbox
-# 📬 1 message(s) for bob:
-#   From: alice  Subject: Research done  Time: 2026-03-11T14:30:00Z
-```
+<p align="center">
+  <img src="docs/fig/mailbox-status.gif" alt="jj-mailbox status, inbox, and read" width="680">
+</p>
 
 ## Why?
 
@@ -106,6 +100,38 @@ mailbox-repo/
 ├── inbox/{name}/processed/       # read messages
 └── shared/                       # shared workspace
 ```
+
+## Testing
+
+Five levels of tests — from pure bash to LLM-powered agents — all in CI:
+
+<table>
+<tr>
+<td width="50%">
+
+**Test Suite** — 10 deterministic tests, no API keys needed
+
+<img src="docs/fig/test-suite.svg" alt="Test suite results" width="100%">
+
+</td>
+<td width="50%">
+
+**Agent Conversation** — threaded multi-turn with refs chain verification
+
+<img src="docs/fig/agent-conversation.gif" alt="Scripted agent conversation" width="100%">
+
+</td>
+</tr>
+</table>
+
+| Level | Test | Requires |
+|-------|------|----------|
+| 1 | Core CLI (init, send, read, status) | bash, jj |
+| 2a | Scripted 3-turn agent conversation | Python |
+| 2b | smolagents CodeAgent integration | LLM API key |
+| 3a | OpenAI function-calling tool use | LLM API key |
+| 4 | Comparison benchmark vs Slack-style | Python |
+| 5 | OpenClaw 5-agent Docker integration | Docker |
 
 ## Learn More
 
