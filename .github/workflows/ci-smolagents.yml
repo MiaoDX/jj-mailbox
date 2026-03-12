@@ -12,7 +12,7 @@ jobs:
     env:
       LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
       LLM_API_BASE: https://openrouter.ai/api/v1
-      LLM_MODEL: openrouter/free
+      LLM_MODEL: nvidia/nemotron-3-super-120b-a12b:free
     steps:
       - uses: actions/checkout@v4
 
@@ -46,6 +46,7 @@ jobs:
         uses: astral-sh/setup-uv@v4
 
       - name: Run smolagents test
+        if: steps.check_key.outputs.has_key == 'true'
         run: uv run --group test-smolagents python3 tests/smolagents/test.py
 
       - name: Summary

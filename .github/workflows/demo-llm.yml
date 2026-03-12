@@ -40,13 +40,17 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Check LLM_API_KEY
+        id: check_key
         run: |
-          if [ -z "$LLM_API_KEY" ]; then
-            echo "::error::LLM_API_KEY secret is not set — cannot run LLM demo"
-            exit 1
+          if [ -n "$LLM_API_KEY" ]; then
+            echo "has_key=true" >> $GITHUB_OUTPUT
+          else
+            echo "has_key=false" >> $GITHUB_OUTPUT
+            echo "::notice::LLM_API_KEY not set — skipping LLM demo"
           fi
 
       - name: Resolve model preset
+        if: steps.check_key.outputs.has_key == 'true'
         id: model
         run: |
           PRESET="${{ inputs.preset }}"
@@ -66,6 +70,7 @@ jobs:
           esac
 
       - name: Install jj
+        if: steps.check_key.outputs.has_key == 'true'
         run: |
           curl -fsSL https://github.com/jj-vcs/jj/releases/download/v0.28.2/jj-v0.28.2-x86_64-unknown-linux-musl.tar.gz \
             | sudo tar -xzf - -C /usr/local/bin/ ./jj
@@ -75,6 +80,7 @@ jobs:
           echo -e '[user]\nname = "CI"\nemail = "ci@jj-mailbox.test"' > ~/.config/jj/config.toml
 
       - name: Setup jj-mailbox
+        if: steps.check_key.outputs.has_key == 'true'
         run: |
           chmod +x bin/jj-mailbox
           bin/jj-mailbox init /tmp/demo
@@ -83,6 +89,7 @@ jobs:
           $GITHUB_WORKSPACE/bin/jj-mailbox register bob "Code reviewer"
 
       - name: Create agent script
+        if: steps.check_key.outputs.has_key == 'true'
         run: |
           cat > /tmp/agent-chat.py << 'PYTHON'
           import json, sys, os, glob, urllib.request
@@ -210,6 +217,7 @@ jobs:
           PYTHON
 
       - name: Run agent conversation
+        if: steps.check_key.outputs.has_key == 'true'
         env:
           JJ_MAILBOX_REPO: /tmp/demo
           LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
@@ -222,6 +230,7 @@ jobs:
           python3 /tmp/agent-chat.py "$TASK" 3
 
       - name: Show jj history
+        if: steps.check_key.outputs.has_key == 'true'
         run: |
           cd /tmp/demo
           echo "=== File tree ==="
@@ -231,12 +240,14 @@ jobs:
           jj log --no-pager
 
       - name: Upload conversation log
+        if: steps.check_key.outputs.has_key == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: conversation-log
           path: /tmp/demo/shared/artifacts/conversation.json
 
       - name: Post summary
+        if: always() && steps.check_key.outputs.has_key == 'true'
         run: |
           echo "## 🤖 Agent Conversation Demo" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY

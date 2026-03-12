@@ -39,10 +39,11 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: comparison-report
-          path: tests/comparison/COMPARISON.md
+          path: build/COMPARISON.md
+          if-no-files-found: warn
 
       - name: Post to GitHub Step Summary
         run: |
           echo "## Slack-style vs jj-mailbox Comparison" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          cat tests/comparison/COMPARISON.md >> $GITHUB_STEP_SUMMARY
+          cat build/COMPARISON.md >> $GITHUB_STEP_SUMMARY
