@@ -7,13 +7,20 @@ on:
     branches: [main]
 
 jobs:
-  # Read model list from tests/models.txt
+  # Read model list and verify all models are free
   load-models:
     runs-on: ubuntu-latest
+    env:
+      LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
     outputs:
       matrix: ${{ steps.models.outputs.matrix }}
     steps:
       - uses: actions/checkout@v4
+
+      - name: Verify all models are free
+        if: env.LLM_API_KEY != ''
+        run: python3 tests/check_free_models.py
+
       - name: Parse models.txt into matrix
         id: models
         run: |
