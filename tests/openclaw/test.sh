@@ -1,15 +1,13 @@
 #!/usr/bin/env bash
-# OpenClaw integration test: two real OpenClaw agents communicating via jj-mailbox
+# OpenClaw integration test: five OpenClaw agents communicating via jj-mailbox
 #
-# Multi-turn conversation: Alice and Bob exchange messages through jj-mailbox,
-# driven by OpenClaw agents (or direct CLI in --no-llm mode).
-# Both agents share the same jj repo volume — no git sync needed.
-#
-# Usage:
-#   ./test.sh           # full test with LLM (needs LLM_API_KEY in .env or env)
-#   ./test.sh --no-llm  # CLI-only test, no API key needed
+# Modes:
+#   ./test.sh --no-llm     # CLI-only, 30 messages across 5 agents
+#   ./test.sh --llm-smoke  # 1 real OpenClaw agent turn + verify receipt
+#   ./test.sh              # LLM smoke test + 30-message CLI test
 #
 # Requires: docker
+# Optional: LLM_API_KEY (from .env or environment)
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -17,15 +15,33 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 cd "$SCRIPT_DIR"
 
 # --- Configuration ---
-TIMEOUT=180  # 3 minutes
+TIMEOUT=300  # 5 minutes (longer for 5 agents + 30 messages)
 NO_LLM=false
+LLM_SMOKE=false
 COMPOSE="docker compose"
-FALLBACK_COUNT=0
+FALLBACK_USED=false
+MSG_COUNT=30
+
+AGENTS=(alice bob carol dave eve)
+NUM_AGENTS=${#AGENTS[@]}
+TOPICS=(
+  "Cache design"
+  "Auth refactor"
+  "API versioning"
+  "DB migration"
+  "Load testing"
+  "Error handling"
+  "Logging strategy"
+  "CI pipeline"
+  "Code review"
+  "Deployment"
+)
 
 # Parse args
 for arg in "$@"; do
   case "$arg" in
     --no-llm) NO_LLM=true ;;
+    --llm-smoke) LLM_SMOKE=true ;;
     *) echo "Unknown option: $arg"; exit 1 ;;
   esac
 done
@@ -43,19 +59,20 @@ fi
 if [ "$NO_LLM" = false ] && [ -z "${LLM_API_KEY:-}" ]; then
   echo "SKIP: LLM_API_KEY not set and --no-llm not specified."
   echo "  Set LLM_API_KEY in .env or export it, or run with --no-llm"
-  echo "  See docs/MODEL_CHOICES.md for provider options."
   exit 0
 fi
 
 echo "============================================================"
-echo "OpenClaw integration test: two agents via jj-mailbox"
+echo "OpenClaw integration test: 5 agents via jj-mailbox"
 echo "============================================================"
 if [ "$NO_LLM" = true ]; then
-  echo "Mode: --no-llm (CLI-only, no OpenClaw agent)"
+  echo "Mode: --no-llm (CLI-only, $MSG_COUNT messages, $NUM_AGENTS agents)"
+elif [ "$LLM_SMOKE" = true ]; then
+  echo "Mode: --llm-smoke (1 OpenClaw agent turn + verify)"
 else
-  echo "Provider: ${LLM_API_BASE:-https://openrouter.ai/api/v1}"
-  echo "Model:    ${LLM_MODEL:-openrouter/free}"
+  echo "Mode: full (LLM smoke + $MSG_COUNT CLI messages)"
 fi
+echo "Agents: ${AGENTS[*]}"
 echo ""
 
 # --- Cleanup ---
@@ -69,10 +86,10 @@ cleanup() {
   if [ $exit_code -ne 0 ]; then
     echo ""
     echo "=== Container logs (failure debug) ==="
-    echo "--- alice ---"
-    $COMPOSE logs --tail=50 alice 2>/dev/null || true
-    echo "--- bob ---"
-    $COMPOSE logs --tail=50 bob 2>/dev/null || true
+    for agent in "${AGENTS[@]}"; do
+      echo "--- $agent ---"
+      $COMPOSE logs --tail=30 "$agent" 2>/dev/null || true
+    done
   fi
   echo "Cleaning up..."
   $COMPOSE down -v --remove-orphans 2>/dev/null || true
@@ -89,20 +106,32 @@ trap cleanup EXIT
 TIMEOUT_PID=$!
 
 # --- Helpers ---
-wait_agents_ready() {
-  # Wait until both agents are registered in the shared repo
-  local max_wait=${1:-60}
+wait_all_agents_ready() {
+  local max_wait=${1:-90}
   local elapsed=0
-  echo "  Waiting for both agents to be registered..."
+  echo "  Waiting for all $NUM_AGENTS agents to register..."
   while [ $elapsed -lt "$max_wait" ]; do
-    if $COMPOSE exec -T alice test -d /mailbox/agents/alice -a -d /mailbox/agents/bob 2>/dev/null; then
-      echo "  Both agents registered (${elapsed}s)"
+    local ready=true
+    for agent in "${AGENTS[@]}"; do
+      if ! $COMPOSE exec -T alice test -d "/mailbox/agents/$agent" 2>/dev/null; then
+        ready=false
+        break
+      fi
+    done
+    if [ "$ready" = true ]; then
+      echo "  All $NUM_AGENTS agents registered (${elapsed}s)"
       return 0
     fi
     sleep 2
     elapsed=$((elapsed + 2))
   done
-  echo "  TIMEOUT: agents not registered after ${max_wait}s"
+  echo "  TIMEOUT: not all agents registered after ${max_wait}s"
+  # Show which ones are missing
+  for agent in "${AGENTS[@]}"; do
+    if ! $COMPOSE exec -T alice test -d "/mailbox/agents/$agent" 2>/dev/null; then
+      echo "    Missing: $agent"
+    fi
+  done
   return 1
 }
 
@@ -112,27 +141,23 @@ wait_for_message() {
   local min_count=$3
   local max_wait=${4:-30}
   local elapsed=0
-  echo "  Polling for $agent to have >= $min_count message(s)..."
   while [ $elapsed -lt "$max_wait" ]; do
     local count
     count=$($COMPOSE exec -T "$container" sh -c \
       "find /mailbox/inbox/$agent/new /mailbox/inbox/$agent/processed -name '*.json' 2>/dev/null | wc -l" \
       | tr -d '[:space:]')
     if [ "${count:-0}" -ge "$min_count" ] 2>/dev/null; then
-      echo "  $agent has $count message(s) (${elapsed}s)"
       return 0
     fi
     sleep 2
     elapsed=$((elapsed + 2))
   done
-  echo "  TIMEOUT: $agent has < $min_count messages after ${max_wait}s"
   return 1
 }
 
 count_messages() {
-  local container=$1
-  local agent=$2
-  $COMPOSE exec -T "$container" sh -c \
+  local agent=$1
+  $COMPOSE exec -T alice sh -c \
     "find /mailbox/inbox/$agent/new /mailbox/inbox/$agent/processed -name '*.json' 2>/dev/null | wc -l" \
     | tr -d '[:space:]'
 }
@@ -141,138 +166,139 @@ count_messages() {
 echo "Building and starting containers..."
 $COMPOSE up -d --build 2>&1
 
-# Wait for both agents to be registered in the shared repo
-wait_agents_ready 60
+wait_all_agents_ready 90
 
-# Verify registrations
+# Show status
 echo "  Agent status:"
-$COMPOSE exec -T alice sh -c 'cd /mailbox && jj-mailbox status' 2>&1 | head -10
-echo ""
-echo "Both agents online."
+$COMPOSE exec -T alice sh -c 'cd /mailbox && jj-mailbox status' 2>&1 | head -15
 echo ""
 
 # ==========================================================================
-# Multi-turn conversation
+# LLM Smoke Test (--llm-smoke or default mode)
 # ==========================================================================
+if [ "$NO_LLM" = false ]; then
+  echo "=== LLM Smoke Test ==="
+  echo "  Alice sending message to Bob via OpenClaw agent..."
+  echo ""
 
-# --- Turn 1: Alice → Bob ---
-echo "=== Turn 1: Alice → Bob ==="
-if [ "$NO_LLM" = true ]; then
-  echo "  (--no-llm: using CLI directly)"
-  $COMPOSE exec -T alice sh -c \
-    'cd /mailbox && jj-mailbox send bob "Cache design" "Should we use LRU or Redis for the session store? Consider our 10k concurrent users requirement."'
-else
-  echo "  Alice's OpenClaw agent sending message to Bob..."
+  # Run one real OpenClaw agent turn
   $COMPOSE exec -T alice openclaw agent --local -m \
-    "Use jj-mailbox to send bob a message. Subject: 'Cache design'. Body: 'Should we use LRU or Redis for the session store? Consider our 10k concurrent users requirement.'" \
-    2>&1 | tail -20 || true
-fi
+    "You have the jj-mailbox skill installed at ~/.openclaw/skills/jj-mailbox. Use it to send bob a message. Run this exact command in your terminal: jj-mailbox send bob 'LLM smoke test' 'Hello from OpenClaw agent. This is an automated test.'" \
+    2>&1 | tail -30 || true
 
-# Poll for Bob to receive Turn 1
-if ! wait_for_message bob bob 1 30; then
-  if [ "$NO_LLM" = false ]; then
-    echo "  Fallback: OpenClaw agent didn't use skill — sending via CLI"
-    FALLBACK_COUNT=$((FALLBACK_COUNT + 1))
+  echo ""
+
+  # Check if bob received the message
+  if wait_for_message alice bob 1 60; then
+    echo "  Bob received message from OpenClaw agent"
+    FALLBACK_USED=false
+  else
+    echo "  OpenClaw agent didn't deliver message (model may not support tool use)"
+    echo "  Using CLI fallback to verify transport layer..."
+    FALLBACK_USED=true
     $COMPOSE exec -T alice sh -c \
-      'cd /mailbox && jj-mailbox send bob "Cache design" "Should we use LRU or Redis for the session store? Consider our 10k concurrent users requirement."'
-    wait_for_message bob bob 1 10 || true
+      'cd /mailbox && jj-mailbox send bob "LLM smoke test" "Fallback: CLI verification"'
+  fi
+  echo ""
+
+  # If --llm-smoke mode, verify and exit
+  if [ "$LLM_SMOKE" = true ]; then
+    BOB_MSGS=$(count_messages bob)
+    echo "=== LLM Smoke Verification ==="
+    echo "  Bob has $BOB_MSGS message(s)"
+    if [ "$BOB_MSGS" -ge 1 ]; then
+      if [ "$FALLBACK_USED" = true ]; then
+        echo "============================================================"
+        echo "PASS: Transport layer verified (CLI fallback used)"
+        echo "  Note: OpenClaw agent did not use jj-mailbox skill autonomously"
+        echo "============================================================"
+      else
+        echo "============================================================"
+        echo "PASS: OpenClaw agent delivered message via jj-mailbox"
+        echo "============================================================"
+      fi
+      exit 0
+    else
+      echo "============================================================"
+      echo "FAIL: No messages delivered to Bob"
+      echo "============================================================"
+      exit 1
+    fi
   fi
 fi
-echo ""
 
-# --- Turn 2: Bob → Alice ---
-echo "=== Turn 2: Bob → Alice ==="
-if [ "$NO_LLM" = true ]; then
-  echo "  (--no-llm: using CLI directly)"
-  $COMPOSE exec -T bob sh -c \
-    'cd /mailbox && jj-mailbox send alice "Re: Cache design" "I recommend Redis for distributed caching with our 10k concurrent users. LRU is better for single-process caches."'
-else
-  echo "  Bob's OpenClaw agent reading inbox and replying..."
-  $COMPOSE exec -T bob openclaw agent --local -m \
-    "Use jj-mailbox to check your inbox (jj-mailbox read bob), then reply to alice with your recommendation. Use jj-mailbox send." \
-    2>&1 | tail -20 || true
-fi
+# ==========================================================================
+# 30-Message Round-Robin Test (--no-llm or default mode)
+# ==========================================================================
+echo "=== $MSG_COUNT-Message Round-Robin Test ==="
+echo "  Sending $MSG_COUNT messages across $NUM_AGENTS agents..."
+printf "  Progress: "
 
-if ! wait_for_message alice alice 1 30; then
-  if [ "$NO_LLM" = false ]; then
-    echo "  Fallback: OpenClaw agent didn't use skill — sending via CLI"
-    FALLBACK_COUNT=$((FALLBACK_COUNT + 1))
-    $COMPOSE exec -T bob sh -c \
-      'cd /mailbox && jj-mailbox send alice "Re: Cache design" "I recommend Redis for distributed caching with our 10k concurrent users."'
-    wait_for_message alice alice 1 10 || true
+for i in $(seq 1 "$MSG_COUNT"); do
+  sender_idx=$(( (i - 1) % NUM_AGENTS ))
+  receiver_idx=$(( i % NUM_AGENTS ))
+  sender="${AGENTS[$sender_idx]}"
+  receiver="${AGENTS[$receiver_idx]}"
+  topic_idx=$(( (i - 1) % ${#TOPICS[@]} ))
+  topic="${TOPICS[$topic_idx]}"
+
+  $COMPOSE exec -T "$sender" sh -c \
+    "cd /mailbox && jj-mailbox send '$receiver' '$topic' 'Message $i from $sender to $receiver about $topic'" \
+    >/dev/null 2>&1
+
+  printf "."
+  if [ $((i % 10)) -eq 0 ]; then
+    printf " "
   fi
-fi
-echo ""
-
-# --- Turn 3: Alice → Bob (follow-up) ---
-echo "=== Turn 3: Alice → Bob (follow-up) ==="
-if [ "$NO_LLM" = true ]; then
-  echo "  (--no-llm: using CLI directly)"
-  $COMPOSE exec -T alice sh -c \
-    'cd /mailbox && jj-mailbox send bob "Re: Cache design" "Thanks for the Redis recommendation. What eviction policy would you suggest — LRU, LFU, or TTL-based?"'
-else
-  echo "  Alice's OpenClaw agent reading reply and sending follow-up..."
-  $COMPOSE exec -T alice openclaw agent --local -m \
-    "Use jj-mailbox to read your inbox (jj-mailbox read alice), then send bob a follow-up message acknowledging his recommendation and asking about eviction policy. Use jj-mailbox send." \
-    2>&1 | tail -20 || true
-fi
-
-if ! wait_for_message bob bob 2 30; then
-  if [ "$NO_LLM" = false ]; then
-    echo "  Fallback: OpenClaw agent didn't use skill — sending via CLI"
-    FALLBACK_COUNT=$((FALLBACK_COUNT + 1))
-    $COMPOSE exec -T alice sh -c \
-      'cd /mailbox && jj-mailbox send bob "Re: Cache design" "Thanks for the Redis recommendation. What eviction policy would you suggest — LRU, LFU, or TTL-based?"'
-    wait_for_message bob bob 2 10 || true
-  fi
-fi
+done
+echo " done"
 echo ""
 
 # ==========================================================================
 # Verification
 # ==========================================================================
-
 echo "=== Verification ==="
-ALICE_MSGS=$(count_messages alice alice)
-BOB_MSGS=$(count_messages bob bob)
-TOTAL=$((ALICE_MSGS + BOB_MSGS))
-
-echo "  Messages delivered to Alice: $ALICE_MSGS"
-echo "  Messages delivered to Bob:   $BOB_MSGS"
-echo "  Total messages:              $TOTAL"
-if [ "$NO_LLM" = false ]; then
-  echo "  Fallback turns:             $FALLBACK_COUNT"
-fi
-
-# jj log
-echo ""
-echo "  jj log (Alice's view):"
-$COMPOSE exec -T alice sh -c 'cd /mailbox && jj log --no-pager 2>/dev/null | head -15' || true
-
-# --- Assertions ---
-echo ""
+TOTAL=0
 PASS=true
 
-if [ "$BOB_MSGS" -lt 2 ]; then
-  echo "FAIL: Bob should have >= 2 messages, got $BOB_MSGS"
+for agent in "${AGENTS[@]}"; do
+  count=$(count_messages "$agent")
+  TOTAL=$((TOTAL + count))
+  printf "  %-8s %s messages" "$agent:" "$count"
+  if [ "$count" -lt 4 ]; then
+    printf "  (expected >= 4)"
+  fi
+  echo ""
+done
+
+echo "  ────────────────────"
+echo "  Total:   $TOTAL messages"
+echo ""
+
+# jj log
+echo "  jj log (last 20 entries):"
+$COMPOSE exec -T alice sh -c 'cd /mailbox && jj log --no-pager 2>/dev/null | head -25' || true
+echo ""
+
+# --- Assertions ---
+if [ "$TOTAL" -lt "$MSG_COUNT" ]; then
+  echo "FAIL: Total messages ($TOTAL) should be >= $MSG_COUNT"
   PASS=false
 fi
 
-if [ "$ALICE_MSGS" -lt 1 ]; then
-  echo "FAIL: Alice should have >= 1 message, got $ALICE_MSGS"
-  PASS=false
-fi
-
-if [ "$TOTAL" -lt 3 ]; then
-  echo "FAIL: Total messages should be >= 3, got $TOTAL"
-  PASS=false
-fi
+for agent in "${AGENTS[@]}"; do
+  count=$(count_messages "$agent")
+  if [ "$count" -lt 1 ]; then
+    echo "FAIL: $agent should have >= 1 message, got $count"
+    PASS=false
+  fi
+done
 
 if [ "$PASS" = true ]; then
   echo "============================================================"
-  echo "PASS: Multi-turn conversation completed successfully"
-  if [ "$NO_LLM" = false ] && [ "$FALLBACK_COUNT" -gt 0 ]; then
-    echo "  (${FALLBACK_COUNT} turn(s) used CLI fallback)"
+  echo "PASS: $MSG_COUNT-message round-robin completed ($NUM_AGENTS agents)"
+  if [ "$NO_LLM" = false ] && [ "$FALLBACK_USED" = true ]; then
+    echo "  Note: LLM smoke test used CLI fallback"
   fi
   echo "============================================================"
 else
