@@ -131,19 +131,28 @@ cat tests/level4-comparison/COMPARISON.md
 **Directory:** `tests/openclaw/`
 
 Two real OpenClaw agents in Docker, communicating via jj-mailbox with the skill loaded.
-Tests the full stack: OpenClaw agent → reads SKILL.md → uses jj-mailbox CLI → messages sync via git.
+Tests the full stack: OpenClaw agent → reads SKILL.md → uses jj-mailbox CLI → shared jj repo.
+Runs a 3-turn multi-turn conversation (Alice → Bob → Alice → Bob).
 
 ```bash
 cd tests/openclaw
 
-# Any provider works (see docs/MODEL_CHOICES.md)
-LLM_API_KEY=sk-or-... ./test.sh
+# CLI-only test (no LLM, no API key needed — fast smoke test)
+./test.sh --no-llm
 
-# Or with a specific provider:
+# Full test with LLM (auto-loads LLM_API_KEY from ../../.env)
+./test.sh
+
+# Or with explicit provider:
+LLM_API_KEY=sk-or-... ./test.sh
 LLM_API_KEY=gsk_... LLM_API_BASE=https://api.groq.com/openai/v1 LLM_MODEL=llama-3.3-70b-versatile ./test.sh
 ```
 
 Requires Docker. Builds on `ghcr.io/openclaw/openclaw:latest`.
+
+**`.env` auto-loading:** If `LLM_API_KEY` is not in the environment, `test.sh` sources `../../.env` automatically.
+
+**`--no-llm` mode:** Skips OpenClaw agent invocation entirely. Messages are sent via direct `jj-mailbox` CLI calls. Useful for testing the transport layer without API keys.
 
 ---
 
