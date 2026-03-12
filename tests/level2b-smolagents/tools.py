@@ -46,6 +46,7 @@ class SendMessageTool(Tool):
         self.bin_path = bin_path
 
     def forward(self, to: str, subject: str, body: str, refs: str = "") -> str:
+        to = to.lower()  # jj-mailbox agent names are lowercase
         cmd = f'{self.bin_path} send {to} "{subject}" "{body}"'
         if refs:
             cmd += f" --refs {refs}"

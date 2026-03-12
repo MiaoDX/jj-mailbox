@@ -2,10 +2,10 @@
 """
 Level 2b: smolagents tool-calling test.
 
-Uses smolagents + Qwen/Qwen2.5-0.5B-Instruct (free with HF_TOKEN).
+Uses smolagents + OpenRouter free model (or any OpenAI-compatible provider).
 jj-mailbox CLI is wrapped as smolagents Tool subclasses.
 
-Skips gracefully if HF_TOKEN is not set.
+Skips gracefully if LLM_API_KEY is not set.
 
 Scenario:
   Alice agent sends Bob a message about a caching design,
@@ -22,8 +22,9 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 REPO_ROOT = os.path.dirname(os.path.dirname(SCRIPT_DIR))
 BIN = os.path.join(REPO_ROOT, "bin", "jj-mailbox")
 
-HF_TOKEN = os.environ.get("HF_TOKEN", "")
-HF_MODEL = os.environ.get("HF_MODEL", "Qwen/Qwen2.5-0.5B-Instruct")
+LLM_API_KEY = os.environ.get("LLM_API_KEY", "")
+LLM_API_BASE = os.environ.get("LLM_API_BASE", "https://openrouter.ai/api/v1")
+LLM_MODEL = os.environ.get("LLM_MODEL", "openrouter/auto")
 
 
 def run(cmd, env=None, check=True):
@@ -51,26 +52,25 @@ def main():
     print("Level 2b: smolagents tool-calling test")
     print("=" * 60)
 
-    if not HF_TOKEN:
+    if not LLM_API_KEY:
         print()
-        print("⏭  SKIP: HF_TOKEN not set.")
-        print("   Set HF_TOKEN to run this test with a free HF model.")
-        print("   Get a token at: https://hf.co/settings/tokens")
+        print("⏭  SKIP: LLM_API_KEY not set.")
+        print("   Set LLM_API_KEY to run this test with an OpenAI-compatible model.")
         sys.exit(0)
 
     # Import smolagents — provide a clear error if not installed
     try:
-        from smolagents import CodeAgent, InferenceClientModel
+        from smolagents import CodeAgent, OpenAIServerModel
     except ImportError:
         print("ERROR: smolagents not installed.")
-        print("  pip install smolagents")
+        print("  pip install 'smolagents[openai]'")
         sys.exit(1)
 
     from tools import CheckInboxTool, ReadMessageTool, SendMessageTool
 
     repo = setup_repo()
     print(f"Test repo: {repo}")
-    print(f"Model: {HF_MODEL}")
+    print(f"Model: {LLM_MODEL} @ {LLM_API_BASE}")
     print()
 
     try:
@@ -80,7 +80,9 @@ def main():
             CheckInboxTool("alice", repo),
             ReadMessageTool("alice", repo),
         ]
-        alice_model = InferenceClientModel(HF_MODEL, token=HF_TOKEN)
+        alice_model = OpenAIServerModel(
+            model_id=LLM_MODEL, api_key=LLM_API_KEY, api_base=LLM_API_BASE
+        )
         alice_agent = CodeAgent(tools=alice_tools, model=alice_model, max_steps=5)
 
         print("Running Alice agent...")
@@ -100,7 +102,9 @@ def main():
             SendMessageTool("bob", repo),
             CheckInboxTool("bob", repo),
         ]
-        bob_model = InferenceClientModel(HF_MODEL, token=HF_TOKEN)
+        bob_model = OpenAIServerModel(
+            model_id=LLM_MODEL, api_key=LLM_API_KEY, api_base=LLM_API_BASE
+        )
         bob_agent = CodeAgent(tools=bob_tools, model=bob_model, max_steps=5)
 
         print("Running Bob agent...")

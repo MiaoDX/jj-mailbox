@@ -6,7 +6,7 @@ Tests are organized in levels of increasing sophistication.
 |-------|-----------|-------|---------|------------|
 | 1 | (ci.yml) | No | None | auto, every push |
 | 2a | level2a-scripted/ | No | None | auto, every push |
-| 2b | level2b-smolagents/ | Free (HF) | HF_TOKEN | auto if secret |
+| 2b | level2b-smolagents/ | Yes, free | LLM_API_KEY | auto if secret |
 | 3a | level3a-llm-free/ | Yes, free | LLM_API_KEY | auto if secret |
 | 3b | level3b-llm-online/ | Yes, paid | LLM_API_KEY | manual only |
 | 4 | level4-comparison/ | Simulated | None | manual/weekly |

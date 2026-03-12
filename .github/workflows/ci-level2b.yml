@@ -10,7 +10,9 @@ jobs:
   smolagents-test:
     runs-on: ubuntu-latest
     env:
-      HF_TOKEN: ${{ secrets.HF_TOKEN }}
+      LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
+      LLM_API_BASE: https://openrouter.ai/api/v1
+      LLM_MODEL: openrouter/auto
     steps:
       - uses: actions/checkout@v4
 
@@ -30,18 +32,18 @@ jobs:
       - name: Make CLI executable
         run: chmod +x bin/jj-mailbox
 
-      - name: Check if HF_TOKEN is set
-        id: check_token
+      - name: Check if LLM_API_KEY is set
+        id: check_key
         run: |
-          if [ -n "$HF_TOKEN" ]; then
-            echo "has_token=true" >> $GITHUB_OUTPUT
+          if [ -n "$LLM_API_KEY" ]; then
+            echo "has_key=true" >> $GITHUB_OUTPUT
           else
-            echo "has_token=false" >> $GITHUB_OUTPUT
-            echo "⏭ HF_TOKEN not set — skipping Level 2b smolagents test"
+            echo "has_key=false" >> $GITHUB_OUTPUT
+            echo "⏭ LLM_API_KEY not set — skipping Level 2b smolagents test"
           fi
 
       - name: Install smolagents
-        if: steps.check_token.outputs.has_token == 'true'
+        if: steps.check_key.outputs.has_key == 'true'
         run: pip install -r tests/level2b-smolagents/requirements.txt
 
       - name: Run Level 2b - smolagents
@@ -52,8 +54,8 @@ jobs:
         run: |
           echo "## Level 2b: smolagents" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          if [ "${{ steps.check_token.outputs.has_token }}" = "true" ]; then
-            echo "- HF_TOKEN present: test ran with Qwen/Qwen2.5-0.5B-Instruct" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ steps.check_key.outputs.has_key }}" = "true" ]; then
+            echo "- Model: \`$LLM_MODEL\` @ $LLM_API_BASE" >> $GITHUB_STEP_SUMMARY
           else
-            echo "- HF_TOKEN absent: test skipped (add HF_TOKEN secret to enable)" >> $GITHUB_STEP_SUMMARY
+            echo "- LLM_API_KEY absent: test skipped (add LLM_API_KEY secret to enable)" >> $GITHUB_STEP_SUMMARY
           fi
