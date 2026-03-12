@@ -21,8 +21,8 @@ context
 .venv/
 __pycache__/
 
-# Generated
-tests/comparison/COMPARISON.md
+# Build artifacts
+build/
 
 # Temp
 *.tmp

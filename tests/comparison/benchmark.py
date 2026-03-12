@@ -24,7 +24,7 @@ from typing import List, Optional
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 REPO_ROOT = os.path.dirname(os.path.dirname(SCRIPT_DIR))
 BIN = os.path.join(REPO_ROOT, "bin", "jj-mailbox")
-OUTPUT_MD = os.path.join(SCRIPT_DIR, "COMPARISON.md")
+OUTPUT_MD = os.path.join(os.path.dirname(os.path.dirname(SCRIPT_DIR)), "build", "COMPARISON.md")
 
 
 # =============================================================================
@@ -330,6 +330,7 @@ def main():
     print()
     print("Generating COMPARISON.md...")
     md = generate_comparison_md(slack_metrics, jj_metrics)
+    os.makedirs(os.path.dirname(OUTPUT_MD), exist_ok=True)
     with open(OUTPUT_MD, "w") as f:
         f.write(md)
     print(f"  Written: {OUTPUT_MD}")
