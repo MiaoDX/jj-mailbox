@@ -7,12 +7,33 @@ on:
     branches: [main]
 
 jobs:
-  llm-agent:
+  # Read model list from tests/models.txt
+  load-models:
     runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.models.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Parse models.txt into matrix
+        id: models
+        run: |
+          # Read non-empty, non-comment lines into a JSON array
+          models=$(grep -v '^#' tests/models.txt | grep -v '^\s*$' | jq -R . | jq -sc .)
+          echo "matrix=$models" >> $GITHUB_OUTPUT
+          echo "Models: $models"
+
+  llm-agent:
+    needs: load-models
+    if: ${{ needs.load-models.outputs.matrix != '[]' }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        model: ${{ fromJson(needs.load-models.outputs.matrix) }}
     env:
       LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
       LLM_API_BASE: https://openrouter.ai/api/v1
-      LLM_MODEL: openrouter/free
+      LLM_MODEL: ${{ matrix.model }}
     steps:
       - uses: actions/checkout@v4
 
@@ -20,7 +41,6 @@ jobs:
         run: |
           curl -fsSL https://github.com/jj-vcs/jj/releases/download/v0.28.2/jj-v0.28.2-x86_64-unknown-linux-musl.tar.gz \
             | sudo tar -xzf - -C /usr/local/bin/ ./jj
-          jj version
 
       - name: Configure git & jj
         run: |
@@ -39,33 +59,30 @@ jobs:
             echo "has_key=true" >> $GITHUB_OUTPUT
           else
             echo "has_key=false" >> $GITHUB_OUTPUT
-            echo "LLM_API_KEY not set — skipping LLM test"
+            echo "LLM_API_KEY not set — skipping"
           fi
 
       - name: Install openai
         if: steps.check_key.outputs.has_key == 'true'
         run: pip install openai
 
-      - name: Run LLM tool-calling test
+      - name: Run LLM test (${{ matrix.model }})
         run: python3 tests/llm/test.py
 
       - name: Upload conversation log
         if: steps.check_key.outputs.has_key == 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: llm-conversation-log
+          name: llm-log-${{ hashFiles(matrix.model) }}
           path: /tmp/jj-mailbox-3a-*/shared/artifacts/conversation.json
           if-no-files-found: ignore
 
       - name: Summary
         if: always()
         run: |
-          echo "## LLM Tool-Calling Agent" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## LLM: \`$LLM_MODEL\`" >> $GITHUB_STEP_SUMMARY
           if [ "${{ steps.check_key.outputs.has_key }}" = "true" ]; then
-            echo "- Model: \`$LLM_MODEL\`" >> $GITHUB_STEP_SUMMARY
-            echo "- API: $LLM_API_BASE" >> $GITHUB_STEP_SUMMARY
             echo "- Scenario: 3-round code review with tool calls" >> $GITHUB_STEP_SUMMARY
           else
-            echo "- LLM_API_KEY absent: test skipped (add secret to enable)" >> $GITHUB_STEP_SUMMARY
+            echo "- Skipped (no LLM_API_KEY secret)" >> $GITHUB_STEP_SUMMARY
           fi
