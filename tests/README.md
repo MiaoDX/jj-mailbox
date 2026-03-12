@@ -10,6 +10,10 @@ Tests are organized in levels of increasing sophistication.
 | 3a | level3a-llm-free/ | Yes, free | LLM_API_KEY | auto if secret |
 | 3b | level3b-llm-online/ | Yes, paid | LLM_API_KEY | manual only |
 | 4 | level4-comparison/ | Simulated | None | manual/weekly |
+| OC | openclaw/ | Yes | LLM_API_KEY | manual (Docker) |
+
+All LLM tests are **model-pluggable** — any OpenAI-compatible provider works.
+See [docs/MODEL_CHOICES.md](../docs/MODEL_CHOICES.md) for provider comparison.
 
 ---
 
@@ -67,8 +71,7 @@ Skips gracefully if `HF_TOKEN` is not set.
 
 **Workflow:** [`.github/workflows/ci-level3a.yml`](../.github/workflows/ci-level3a.yml)
 
-Uses OpenAI function calling with a free model (MiMo via OpenRouter or local ollama).
-Agents actually invoke jj-mailbox operations as structured tool calls.
+Uses OpenAI function calling with a free model. Any provider works (see [docs/MODEL_CHOICES.md](../docs/MODEL_CHOICES.md)).
 
 ```bash
 pip install openai
@@ -76,10 +79,11 @@ pip install openai
 # Option A: local ollama
 export OLLAMA=1  # auto-configures localhost:11434 + qwen2.5:0.5b
 
-# Option B: OpenRouter (free)
+# Option B: OpenRouter (default, free)
 export LLM_API_KEY=sk-or-...
-export LLM_API_BASE=https://openrouter.ai/api/v1
-export LLM_MODEL=xiaomi/mimo-v2-flash:free
+
+# Option C: any provider
+export LLM_API_KEY=gsk_... LLM_API_BASE=https://api.groq.com/openai/v1 LLM_MODEL=llama-3.3-70b-versatile
 
 python3 tests/level3a-llm-free/test.py
 ```
@@ -119,6 +123,27 @@ then generates a `COMPARISON.md` report highlighting structural differences.
 python3 tests/level4-comparison/benchmark.py
 cat tests/level4-comparison/COMPARISON.md
 ```
+
+---
+
+## OpenClaw integration test
+
+**Directory:** `tests/openclaw/`
+
+Two real OpenClaw agents in Docker, communicating via jj-mailbox with the skill loaded.
+Tests the full stack: OpenClaw agent → reads SKILL.md → uses jj-mailbox CLI → messages sync via git.
+
+```bash
+cd tests/openclaw
+
+# Any provider works (see docs/MODEL_CHOICES.md)
+LLM_API_KEY=sk-or-... ./test.sh
+
+# Or with a specific provider:
+LLM_API_KEY=gsk_... LLM_API_BASE=https://api.groq.com/openai/v1 LLM_MODEL=llama-3.3-70b-versatile ./test.sh
+```
+
+Requires Docker. Builds on `ghcr.io/openclaw/openclaw:latest`.
 
 ---
 

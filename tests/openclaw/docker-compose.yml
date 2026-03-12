@@ -1,0 +1,99 @@
+# Two raw OpenClaw agents communicating via jj-mailbox
+#
+# Usage:
+#   # Set your LLM provider (see docs/MODEL_CHOICES.md)
+#   export LLM_API_KEY=sk-or-...
+#   export LLM_API_BASE=https://openrouter.ai/api/v1   # optional, defaults to OpenRouter
+#   export LLM_MODEL=openrouter/free                    # optional
+#
+#   # Run the test
+#   ./test.sh
+#
+#   # Or manually:
+#   docker compose up -d
+#   docker compose exec alice openclaw agent --message "Send bob a message about caching design"
+#   docker compose exec bob openclaw agent --message "Read your inbox and reply"
+
+services:
+  # Bare git repo as shared remote
+  git-remote:
+    image: alpine/git:latest
+    command: >
+      sh -c "
+        if [ ! -f /git-remote/mailbox.git/HEAD ]; then
+          git init --bare /git-remote/mailbox.git;
+        fi;
+        tail -f /dev/null
+      "
+    volumes:
+      - git-remote:/git-remote
+
+  alice:
+    build:
+      context: ../..
+      dockerfile: tests/openclaw/Dockerfile
+    container_name: openclaw-alice
+    hostname: alice
+    environment:
+      - JJ_MAILBOX_AGENT=alice
+      - JJ_MAILBOX_REPO=/mailbox
+      - JJ_MAILBOX_INTERVAL=10
+      - OPENAI_API_KEY=${LLM_API_KEY}
+      - OPENAI_BASE_URL=${LLM_API_BASE:-https://openrouter.ai/api/v1}
+      - OPENCLAW_MODEL=${LLM_MODEL:-openrouter/free}
+    volumes:
+      - git-remote:/git-remote
+      - alice-data:/mailbox
+    depends_on:
+      - git-remote
+    command: >
+      sh -c "
+        cd /mailbox;
+        if [ ! -d .jj ]; then
+          jj git clone --colocate /git-remote/mailbox.git . 2>/dev/null || jj git init --colocate;
+          jj git remote add origin /git-remote/mailbox.git 2>/dev/null || true;
+          jj-mailbox register alice 'Research specialist';
+          jj git push --all 2>/dev/null || true;
+        fi;
+        jj git fetch --all-remotes 2>/dev/null || true;
+        echo '=== Alice (OpenClaw) online ===';
+        jj-mailbox sync
+      "
+
+  bob:
+    build:
+      context: ../..
+      dockerfile: tests/openclaw/Dockerfile
+    container_name: openclaw-bob
+    hostname: bob
+    environment:
+      - JJ_MAILBOX_AGENT=bob
+      - JJ_MAILBOX_REPO=/mailbox
+      - JJ_MAILBOX_INTERVAL=10
+      - OPENAI_API_KEY=${LLM_API_KEY}
+      - OPENAI_BASE_URL=${LLM_API_BASE:-https://openrouter.ai/api/v1}
+      - OPENCLAW_MODEL=${LLM_MODEL:-openrouter/free}
+    volumes:
+      - git-remote:/git-remote
+      - bob-data:/mailbox
+    depends_on:
+      - git-remote
+    command: >
+      sh -c "
+        sleep 3;
+        cd /mailbox;
+        if [ ! -d .jj ]; then
+          jj git clone --colocate /git-remote/mailbox.git . 2>/dev/null || jj git init --colocate;
+          jj git remote add origin /git-remote/mailbox.git 2>/dev/null || true;
+          jj-mailbox register bob 'Code review specialist';
+          jj git push --all 2>/dev/null || true;
+        fi;
+        jj git fetch --all-remotes 2>/dev/null || true;
+        echo '=== Bob (OpenClaw) online ===';
+        jj-mailbox sync
+      "
+
+volumes:
+  git-remote:
+  alice-data:
+  bob-data:
