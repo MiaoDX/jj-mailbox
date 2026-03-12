@@ -26,6 +26,7 @@ build/
 
 # Temp
 *.tmp
+*.webm
 
 # Env & logs
 .env
