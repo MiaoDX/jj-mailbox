@@ -181,10 +181,10 @@ if [ "$NO_LLM" = false ]; then
   echo "  Alice sending message to Bob via OpenClaw agent..."
   echo ""
 
-  # Run one real OpenClaw agent turn
-  $COMPOSE exec -T alice openclaw agent --local -m \
+  # Run one real OpenClaw agent turn (--session-id required by openclaw agent)
+  $COMPOSE exec -T alice openclaw agent --local --session-id smoke-test -m \
     "You have the jj-mailbox skill installed at ~/.openclaw/skills/jj-mailbox. Use it to send bob a message. Run this exact command in your terminal: jj-mailbox send bob 'LLM smoke test' 'Hello from OpenClaw agent. This is an automated test.'" \
-    2>&1 | tail -30 || true
+    2>&1 | tail -50 || true
 
   echo ""
 

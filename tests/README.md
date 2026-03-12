@@ -10,7 +10,7 @@ Tests are organized in levels of increasing sophistication.
 | 3a | level3a-llm-free/ | Yes, free | LLM_API_KEY | auto if secret |
 | 3b | level3b-llm-online/ | Yes, paid | LLM_API_KEY | manual only |
 | 4 | level4-comparison/ | Simulated | None | manual/weekly |
-| OC | openclaw/ | Yes | LLM_API_KEY | manual (Docker) |
+| OC | openclaw/ | Yes | LLM_API_KEY | auto if secret (Docker) |
 
 All LLM tests are **model-pluggable** — any OpenAI-compatible provider works.
 See [docs/MODEL_CHOICES.md](../docs/MODEL_CHOICES.md) for provider comparison.

@@ -8,6 +8,10 @@
 #   ./test.sh --llm-smoke  # 1 real OpenClaw agent turn + verify receipt
 #   ./test.sh              # full LLM test (needs LLM_API_KEY)
 
+# env_file provides LLM_API_KEY from .env.
+# Do NOT re-declare LLM_API_KEY in environment: — it shadows env_file with
+# the host's (possibly empty) value via ${LLM_API_KEY:-}.
+
 x-agent-common: &agent-common
   build:
     context: ../..
@@ -26,22 +30,24 @@ services:
     environment:
       - JJ_MAILBOX_AGENT=alice
       - JJ_MAILBOX_REPO=/mailbox
-      - LLM_API_KEY=${LLM_API_KEY:-}
-      - OPENAI_API_KEY=${LLM_API_KEY:-}
-      - OPENAI_BASE_URL=${LLM_API_BASE:-https://openrouter.ai/api/v1}
-      - OPENCLAW_MODEL=${LLM_MODEL:-openrouter/free}
-    command: >
-      sh -c "
-        openclaw setup --non-interactive --mode local --workspace /mailbox 2>/dev/null || true;
+    command:
+      - sh
+      - -c
+      - |
+        # OpenClaw auth setup (uses LLM_API_KEY from env_file)
+        if [ -n "$$LLM_API_KEY" ]; then
+          openclaw onboard --non-interactive --accept-risk \
+            --mode local --workspace /mailbox \
+            --auth-choice openrouter-api-key --openrouter-api-key "$$LLM_API_KEY" \
+            --skip-channels --skip-daemon --skip-health --skip-search --skip-skills --skip-ui \
+            2>/dev/null || true;
+        fi;
         openclaw models set openrouter/openrouter/free 2>/dev/null || true;
         cd /mailbox;
-        if [ ! -d .jj ]; then
-          jj git init --colocate;
-        fi;
+        if [ ! -d .jj ]; then jj git init --colocate; fi;
         jj-mailbox register alice 'Research specialist';
         echo '=== Alice online ===';
         tail -f /dev/null
-      "
 
   bob:
     <<: *agent-common
@@ -52,20 +58,23 @@ services:
     environment:
       - JJ_MAILBOX_AGENT=bob
       - JJ_MAILBOX_REPO=/mailbox
-      - LLM_API_KEY=${LLM_API_KEY:-}
-      - OPENAI_API_KEY=${LLM_API_KEY:-}
-      - OPENAI_BASE_URL=${LLM_API_BASE:-https://openrouter.ai/api/v1}
-      - OPENCLAW_MODEL=${LLM_MODEL:-openrouter/free}
-    command: >
-      sh -c "
-        openclaw setup --non-interactive --mode local --workspace /mailbox 2>/dev/null || true;
+    command:
+      - sh
+      - -c
+      - |
+        if [ -n "$$LLM_API_KEY" ]; then
+          openclaw onboard --non-interactive --accept-risk \
+            --mode local --workspace /mailbox \
+            --auth-choice openrouter-api-key --openrouter-api-key "$$LLM_API_KEY" \
+            --skip-channels --skip-daemon --skip-health --skip-search --skip-skills --skip-ui \
+            2>/dev/null || true;
+        fi;
         openclaw models set openrouter/openrouter/free 2>/dev/null || true;
         until [ -d /mailbox/.jj ]; do sleep 1; done;
         sleep 2;
         jj-mailbox register bob 'Code review specialist';
         echo '=== Bob online ===';
         tail -f /dev/null
-      "
 
   carol:
     <<: *agent-common
@@ -76,20 +85,23 @@ services:
     environment:
       - JJ_MAILBOX_AGENT=carol
       - JJ_MAILBOX_REPO=/mailbox
-      - LLM_API_KEY=${LLM_API_KEY:-}
-      - OPENAI_API_KEY=${LLM_API_KEY:-}
-      - OPENAI_BASE_URL=${LLM_API_BASE:-https://openrouter.ai/api/v1}
-      - OPENCLAW_MODEL=${LLM_MODEL:-openrouter/free}
-    command: >
-      sh -c "
-        openclaw setup --non-interactive --mode local --workspace /mailbox 2>/dev/null || true;
+    command:
+      - sh
+      - -c
+      - |
+        if [ -n "$$LLM_API_KEY" ]; then
+          openclaw onboard --non-interactive --accept-risk \
+            --mode local --workspace /mailbox \
+            --auth-choice openrouter-api-key --openrouter-api-key "$$LLM_API_KEY" \
+            --skip-channels --skip-daemon --skip-health --skip-search --skip-skills --skip-ui \
+            2>/dev/null || true;
+        fi;
         openclaw models set openrouter/openrouter/free 2>/dev/null || true;
         until [ -d /mailbox/.jj ]; do sleep 1; done;
         sleep 4;
         jj-mailbox register carol 'Testing engineer';
         echo '=== Carol online ===';
         tail -f /dev/null
-      "
 
   dave:
     <<: *agent-common
@@ -100,20 +112,23 @@ services:
     environment:
       - JJ_MAILBOX_AGENT=dave
       - JJ_MAILBOX_REPO=/mailbox
-      - LLM_API_KEY=${LLM_API_KEY:-}
-      - OPENAI_API_KEY=${LLM_API_KEY:-}
-      - OPENAI_BASE_URL=${LLM_API_BASE:-https://openrouter.ai/api/v1}
-      - OPENCLAW_MODEL=${LLM_MODEL:-openrouter/free}
-    command: >
-      sh -c "
-        openclaw setup --non-interactive --mode local --workspace /mailbox 2>/dev/null || true;
+    command:
+      - sh
+      - -c
+      - |
+        if [ -n "$$LLM_API_KEY" ]; then
+          openclaw onboard --non-interactive --accept-risk \
+            --mode local --workspace /mailbox \
+            --auth-choice openrouter-api-key --openrouter-api-key "$$LLM_API_KEY" \
+            --skip-channels --skip-daemon --skip-health --skip-search --skip-skills --skip-ui \
+            2>/dev/null || true;
+        fi;
         openclaw models set openrouter/openrouter/free 2>/dev/null || true;
         until [ -d /mailbox/.jj ]; do sleep 1; done;
         sleep 6;
         jj-mailbox register dave 'DevOps engineer';
         echo '=== Dave online ===';
         tail -f /dev/null
-      "
 
   eve:
     <<: *agent-common
@@ -124,20 +139,23 @@ services:
     environment:
       - JJ_MAILBOX_AGENT=eve
       - JJ_MAILBOX_REPO=/mailbox
-      - LLM_API_KEY=${LLM_API_KEY:-}
-      - OPENAI_API_KEY=${LLM_API_KEY:-}
-      - OPENAI_BASE_URL=${LLM_API_BASE:-https://openrouter.ai/api/v1}
-      - OPENCLAW_MODEL=${LLM_MODEL:-openrouter/free}
-    command: >
-      sh -c "
-        openclaw setup --non-interactive --mode local --workspace /mailbox 2>/dev/null || true;
+    command:
+      - sh
+      - -c
+      - |
+        if [ -n "$$LLM_API_KEY" ]; then
+          openclaw onboard --non-interactive --accept-risk \
+            --mode local --workspace /mailbox \
+            --auth-choice openrouter-api-key --openrouter-api-key "$$LLM_API_KEY" \
+            --skip-channels --skip-daemon --skip-health --skip-search --skip-skills --skip-ui \
+            2>/dev/null || true;
+        fi;
         openclaw models set openrouter/openrouter/free 2>/dev/null || true;
         until [ -d /mailbox/.jj ]; do sleep 1; done;
         sleep 8;
         jj-mailbox register eve 'Security analyst';
         echo '=== Eve online ===';
         tail -f /dev/null
-      "
 
 volumes:
   mailbox-data:

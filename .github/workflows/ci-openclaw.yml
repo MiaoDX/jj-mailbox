@@ -1,0 +1,50 @@
+name: CI - OpenClaw Integration
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  openclaw-integration:
+    runs-on: ubuntu-latest
+    env:
+      LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check mode
+        id: mode
+        run: |
+          if [ -n "$LLM_API_KEY" ]; then
+            echo "mode=llm-smoke" >> $GITHUB_OUTPUT
+            echo "OpenClaw test: --llm-smoke (LLM_API_KEY present)"
+          else
+            echo "mode=no-llm" >> $GITHUB_OUTPUT
+            echo "OpenClaw test: --no-llm (LLM_API_KEY absent)"
+          fi
+
+      - name: Run OpenClaw integration test
+        run: |
+          chmod +x tests/openclaw/test.sh
+          if [ "${{ steps.mode.outputs.mode }}" = "llm-smoke" ]; then
+            tests/openclaw/test.sh --llm-smoke
+          else
+            tests/openclaw/test.sh --no-llm
+          fi
+        timeout-minutes: 8
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "## OpenClaw Integration Test" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- Mode: \`--${{ steps.mode.outputs.mode }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- Agents: alice, bob, carol, dave, eve" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ steps.mode.outputs.mode }}" = "no-llm" ]; then
+            echo "- 30 CLI messages round-robin across 5 agents" >> $GITHUB_STEP_SUMMARY
+            echo "- Add \`LLM_API_KEY\` secret to enable LLM smoke test" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- 1 OpenClaw agent turn + mailbox receipt verification" >> $GITHUB_STEP_SUMMARY
+          fi
