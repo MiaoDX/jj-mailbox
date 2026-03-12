@@ -5,8 +5,9 @@ Level 3a: Tool-calling LLM agent with a free model.
 Uses OpenAI function calling so agents invoke jj-mailbox as actual tool calls.
 Skips gracefully if LLM_API_KEY is not set and OLLAMA is not set.
 
-Default model: xiaomi/mimo-v2-flash:free via OpenRouter (free, no credit required)
+Default model: openrouter/free via OpenRouter (auto-routes to best free model)
 Local option:  qwen2.5:0.5b via ollama (set OLLAMA=1)
+See docs/MODEL_CHOICES.md for all provider options.
 
 Scenario: "Code review, 3 rounds"
   Alice proposes a function design
@@ -42,7 +43,7 @@ if USE_OLLAMA:
 else:
     LLM_API_KEY = os.environ.get("LLM_API_KEY", "")
     LLM_API_BASE = os.environ.get("LLM_API_BASE", "https://openrouter.ai/api/v1")
-    LLM_MODEL = os.environ.get("LLM_MODEL", "xiaomi/mimo-v2-flash:free")
+    LLM_MODEL = os.environ.get("LLM_MODEL", "openrouter/free")
 
 MAX_TURNS = 6  # max tool-calling turns per agent per round
 
@@ -110,6 +111,11 @@ def setup_repo():
         "git config --global user.name CI 2>/dev/null || true",
         shell=True, capture_output=True,
     )
+    # Configure jj user to suppress warnings
+    subprocess.run(
+        'mkdir -p ~/.config/jj && printf \'[user]\\nname = "CI"\\nemail = "ci@test.local"\\n\' > ~/.config/jj/config.toml 2>/dev/null || true',
+        shell=True, capture_output=True,
+    )
     subprocess.run(f"{BIN} init {repo}", shell=True, check=True)
     subprocess.run(f"JJ_MAILBOX_REPO={repo} {BIN} register alice 'Function designer'", shell=True, check=True)
     subprocess.run(f"JJ_MAILBOX_REPO={repo} {BIN} register bob 'Code reviewer'", shell=True, check=True)
@@ -120,7 +126,7 @@ def setup_repo():
 def execute_tool(name, args, agent_name, repo):
     """Execute a tool call and return string result."""
     if name == "send_message":
-        to = args.get("to", "")
+        to = args.get("to", "").lower().strip()
         subject = args.get("subject", "")
         body = args.get("body", "")
         refs = args.get("refs", "")
@@ -158,7 +164,8 @@ def execute_tool(name, args, agent_name, repo):
     return f"Unknown tool: {name}"
 
 
-def run_agent(agent_name, system_prompt, user_prompt, repo, client, log):
+def run_agent(agent_name, system_prompt, user_prompt, repo, client, log,
+              force_tool=False):
     """Run an agent with tool calling, returning the final text response."""
     import openai
 
@@ -168,14 +175,24 @@ def run_agent(agent_name, system_prompt, user_prompt, repo, client, log):
     ]
 
     for turn in range(MAX_TURNS):
-        response = client.chat.completions.create(
-            model=LLM_MODEL,
-            messages=messages,
-            tools=TOOLS,
-            tool_choice="auto",
-            max_tokens=500,
-            temperature=0.7,
-        )
+        # Force tool use on first turn if requested (some free models skip tools)
+        choice = "required" if force_tool and turn == 0 else "auto"
+        try:
+            response = client.chat.completions.create(
+                model=LLM_MODEL,
+                messages=messages,
+                tools=TOOLS,
+                tool_choice=choice,
+                max_tokens=500,
+                temperature=0.7,
+            )
+        except openai.NotFoundError as e:
+            print(f"  [{agent_name}] Model error: {e.message}")
+            print(f"  Hint: try a different model — see docs/MODEL_CHOICES.md")
+            return f"Model error: {e.message}"
+        except openai.APIError as e:
+            print(f"  [{agent_name}] API error: {e}")
+            return f"API error: {e}"
         msg = response.choices[0].message
 
         # If no tool calls, we're done
@@ -195,7 +212,11 @@ def run_agent(agent_name, system_prompt, user_prompt, repo, client, log):
         ]})
 
         for tc in msg.tool_calls:
-            args = json.loads(tc.function.arguments)
+            try:
+                args = json.loads(tc.function.arguments)
+            except json.JSONDecodeError:
+                # Some free models emit malformed JSON; try to salvage
+                args = {}
             result = execute_tool(tc.function.name, args, agent_name, repo)
             print(f"  [{agent_name}] tool: {tc.function.name}({args}) → {result[:80]}")
             log.append({"agent": agent_name, "type": "tool_call", "tool": tc.function.name, "args": args, "result": result})
@@ -241,10 +262,12 @@ def main():
         alice_reply = run_agent(
             "alice",
             "You are Alice, a software engineer. You collaborate with Bob via jj-mailbox. "
-            "Use the send_message tool to communicate. Be concise.",
-            "Send Bob a message proposing a design for a 'process_batch(items)' function. "
-            "Include: purpose, parameters, return value. Subject: 'Function design proposal'.",
+            "You MUST use the send_message tool to communicate. Agent names are lowercase.",
+            "Use the send_message tool to send bob a message proposing a design for a "
+            "'process_batch(items)' function. Include: purpose, parameters, return value. "
+            "Subject: 'Function design proposal'.",
             repo, client, log,
+            force_tool=True,
         )
         print(f"Alice: {alice_reply[:200]}")
         print()
@@ -254,11 +277,11 @@ def main():
         bob_reply = run_agent(
             "bob",
             "You are Bob, a code reviewer. You collaborate with Alice via jj-mailbox. "
-            "Use read_inbox to read messages, send_message to reply. Be concise.",
-            "Read Alice's message using read_inbox, then reply with your code review "
-            "feedback. Use send_message to reply to alice. "
-            "Subject: 'Re: Function design proposal'.",
+            "You MUST use read_inbox and send_message tools. Agent names are lowercase.",
+            "Use read_inbox to read Alice's message, then use send_message to reply to alice "
+            "with your code review feedback. Subject: 'Re: Function design proposal'.",
             repo, client, log,
+            force_tool=True,
         )
         print(f"Bob: {bob_reply[:200]}")
         print()

@@ -110,7 +110,7 @@ def setup_repo():
 
 def execute_tool(name, args, agent_name, repo):
     if name == "send_message":
-        to = args.get("to", "")
+        to = args.get("to", "").lower().strip()
         subject = args.get("subject", "")
         body = args.get("body", "")
         refs = args.get("refs", "")
