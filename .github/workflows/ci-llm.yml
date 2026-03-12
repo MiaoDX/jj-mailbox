@@ -1,4 +1,4 @@
-name: CI - Level 3a Free LLM Agent
+name: CI - LLM Tool-Calling Agent
 
 on:
   push:
@@ -7,12 +7,12 @@ on:
     branches: [main]
 
 jobs:
-  free-llm-agent:
+  llm-agent:
     runs-on: ubuntu-latest
     env:
       LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
       LLM_API_BASE: https://openrouter.ai/api/v1
-      LLM_MODEL: openrouter/free
+      LLM_MODEL: openrouter/auto
     steps:
       - uses: actions/checkout@v4
 
@@ -39,33 +39,33 @@ jobs:
             echo "has_key=true" >> $GITHUB_OUTPUT
           else
             echo "has_key=false" >> $GITHUB_OUTPUT
-            echo "⏭ LLM_API_KEY not set — skipping Level 3a test"
+            echo "LLM_API_KEY not set — skipping LLM test"
           fi
 
       - name: Install openai
         if: steps.check_key.outputs.has_key == 'true'
         run: pip install openai
 
-      - name: Run Level 3a - Tool-calling LLM agent
-        run: python3 tests/level3a-llm-free/test.py
+      - name: Run LLM tool-calling test
+        run: python3 tests/llm/test.py
 
       - name: Upload conversation log
         if: steps.check_key.outputs.has_key == 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: level3a-conversation-log
+          name: llm-conversation-log
           path: /tmp/jj-mailbox-3a-*/shared/artifacts/conversation.json
           if-no-files-found: ignore
 
       - name: Summary
         if: always()
         run: |
-          echo "## Level 3a: Free LLM Tool-Calling Agent" >> $GITHUB_STEP_SUMMARY
+          echo "## LLM Tool-Calling Agent" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           if [ "${{ steps.check_key.outputs.has_key }}" = "true" ]; then
             echo "- Model: \`$LLM_MODEL\`" >> $GITHUB_STEP_SUMMARY
             echo "- API: $LLM_API_BASE" >> $GITHUB_STEP_SUMMARY
             echo "- Scenario: 3-round code review with tool calls" >> $GITHUB_STEP_SUMMARY
           else
-            echo "- LLM_API_KEY absent: test skipped (add LLM_API_KEY secret to enable)" >> $GITHUB_STEP_SUMMARY
+            echo "- LLM_API_KEY absent: test skipped (add secret to enable)" >> $GITHUB_STEP_SUMMARY
           fi

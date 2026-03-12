@@ -1,6 +1,6 @@
 # Slack-style vs jj-mailbox Comparison
 
-> Generated: 2026-03-11T16:10:18Z
+> Generated: 2026-03-12T08:00:45Z
 
 ## Scenario
 
@@ -13,7 +13,7 @@
 | Metric | Slack-style | jj-mailbox |
 |--------|------------|------------|
 | Messages delivered | 8 | 8 |
-| Elapsed (ms) | 0.0 | 1022.4 |
+| Elapsed (ms) | 0.0 | 327.9 |
 
 ## Capability Comparison
 

@@ -1,4 +1,4 @@
-name: CI - Level 2b smolagents
+name: CI - smolagents
 
 on:
   push:
@@ -39,23 +39,23 @@ jobs:
             echo "has_key=true" >> $GITHUB_OUTPUT
           else
             echo "has_key=false" >> $GITHUB_OUTPUT
-            echo "⏭ LLM_API_KEY not set — skipping Level 2b smolagents test"
+            echo "LLM_API_KEY not set — skipping smolagents test"
           fi
 
       - name: Install smolagents
         if: steps.check_key.outputs.has_key == 'true'
-        run: pip install -r tests/level2b-smolagents/requirements.txt
+        run: pip install -r tests/smolagents/requirements.txt
 
-      - name: Run Level 2b - smolagents
-        run: python3 tests/level2b-smolagents/test.py
+      - name: Run smolagents test
+        run: python3 tests/smolagents/test.py
 
       - name: Summary
         if: always()
         run: |
-          echo "## Level 2b: smolagents" >> $GITHUB_STEP_SUMMARY
+          echo "## smolagents" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           if [ "${{ steps.check_key.outputs.has_key }}" = "true" ]; then
             echo "- Model: \`$LLM_MODEL\` @ $LLM_API_BASE" >> $GITHUB_STEP_SUMMARY
           else
-            echo "- LLM_API_KEY absent: test skipped (add LLM_API_KEY secret to enable)" >> $GITHUB_STEP_SUMMARY
+            echo "- LLM_API_KEY absent: test skipped (add secret to enable)" >> $GITHUB_STEP_SUMMARY
           fi

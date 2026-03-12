@@ -6,27 +6,27 @@ All tests and demos accept the same three environment variables:
 ```bash
 LLM_API_KEY=...                          # your API key
 LLM_API_BASE=https://openrouter.ai/api/v1  # provider endpoint
-LLM_MODEL=openrouter/free                # model ID
+LLM_MODEL=openrouter/auto               # model ID
 ```
 
 ## Recommended Providers (Free Tier)
 
 | Provider | Base URL | Recommended Model | Daily Limit | Tool Calling | Signup |
 |----------|----------|-------------------|-------------|:------------:|--------|
-| **OpenRouter** | `https://openrouter.ai/api/v1` | `openrouter/free` | 50 req (1K with $10) | Yes | No card |
+| **OpenRouter** | `https://openrouter.ai/api/v1` | `openrouter/auto` | 50 req (1K with $10) | Yes | No card |
 | **Groq** | `https://api.groq.com/openai/v1` | `llama-3.3-70b-versatile` | 1K req | Yes | No card |
 | **Cerebras** | `https://api.cerebras.ai/v1` | `llama-3.3-70b` | 1M tokens | Yes | No card |
 | **Google AI Studio** | `https://generativelanguage.googleapis.com/v1beta/openai/` | `gemini-2.5-flash` | 250 req | Yes | No card |
 
 ### OpenRouter (default)
 
-The best starting point. The `openrouter/free` meta-model auto-routes to whichever free model supports your request (including tool calling). ~27 free models available including Qwen3, GPT-OSS, Llama 4, DeepSeek R1.
+The best starting point. The `openrouter/auto` meta-model auto-routes to whichever free model supports your request (including tool calling). ~27 free models available including Qwen3, GPT-OSS, Llama 4, DeepSeek R1.
 
 ```bash
 # Sign up at https://openrouter.ai/ — no credit card needed
 LLM_API_KEY=sk-or-...
 LLM_API_BASE=https://openrouter.ai/api/v1
-LLM_MODEL=openrouter/free
+LLM_MODEL=openrouter/auto
 ```
 
 Free tier: 20 RPM, 50 req/day. One-time $10 purchase unlocks 1K req/day permanently.
@@ -91,23 +91,18 @@ All providers use the same OpenAI-compatible interface, so switching is just env
 ```bash
 # Run any test with any provider
 LLM_API_KEY=gsk_... LLM_API_BASE=https://api.groq.com/openai/v1 LLM_MODEL=llama-3.3-70b-versatile \
-  python3 tests/level3a-llm-free/test.py
+  python3 tests/llm/test.py
 ```
 
 The same applies to the OpenClaw integration test, CI workflows, and demos.
 
-## HF_TOKEN (Level 2b only)
-
-Level 2b uses [smolagents](https://github.com/huggingface/smolagents) which requires a Hugging Face token — separate from `LLM_API_KEY`. Get one free at https://hf.co/settings/tokens.
-
 ## For CI
 
-Add secrets to your GitHub repo settings (`Settings → Secrets → Actions`):
+Add one secret to your GitHub repo settings (`Settings → Secrets → Actions`):
 
 | Secret | Used by | Required? |
 |--------|---------|-----------|
-| `LLM_API_KEY` | Level 3a, 3b, OpenClaw test | For LLM tests |
-| `HF_TOKEN` | Level 2b | For smolagents test |
+| `LLM_API_KEY` | smolagents, llm, OpenClaw tests | For LLM tests |
 
 One key covers all LLM-based tests. Set `LLM_API_BASE` and `LLM_MODEL` in the workflow if you want a specific provider (defaults to OpenRouter).
 

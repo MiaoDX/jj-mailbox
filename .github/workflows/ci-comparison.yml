@@ -1,13 +1,13 @@
-name: CI - Level 2a Scripted Agents
+name: CI - Comparison Benchmark
 
 on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
+  workflow_dispatch: {}
+  schedule:
+    # Weekly on Monday 06:00 UTC
+    - cron: '0 6 * * 1'
 
 jobs:
-  scripted-agents:
+  comparison-benchmark:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -28,13 +28,17 @@ jobs:
       - name: Make CLI executable
         run: chmod +x bin/jj-mailbox
 
-      - name: Run Level 2a - Scripted agents
-        run: python3 tests/level2a-scripted/test.py
+      - name: Run comparison benchmark
+        run: python3 tests/comparison/benchmark.py
 
-      - name: Summary
-        if: always()
+      - name: Upload COMPARISON.md
+        uses: actions/upload-artifact@v4
+        with:
+          name: comparison-report
+          path: tests/comparison/COMPARISON.md
+
+      - name: Post to GitHub Step Summary
         run: |
-          echo "## Level 2a: Scripted Agents" >> $GITHUB_STEP_SUMMARY
+          echo "## Slack-style vs jj-mailbox Comparison" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "- No LLM required" >> $GITHUB_STEP_SUMMARY
-          echo "- Tests: refs chain, multi-turn threading, shared artifacts" >> $GITHUB_STEP_SUMMARY
+          cat tests/comparison/COMPARISON.md >> $GITHUB_STEP_SUMMARY

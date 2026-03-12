@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Level 3a: Tool-calling LLM agent with a free model.
+LLM tool-calling agent test.
 
 Uses OpenAI function calling so agents invoke jj-mailbox as actual tool calls.
 Skips gracefully if LLM_API_KEY is not set and OLLAMA is not set.
@@ -16,10 +16,10 @@ Scenario: "Code review, 3 rounds"
 
 Usage:
   # Local ollama:
-  OLLAMA=1 python3 tests/level3a-llm-free/test.py
+  OLLAMA=1 python3 tests/llm/test.py
 
   # OpenRouter:
-  LLM_API_KEY=sk-or-... python3 tests/level3a-llm-free/test.py
+  LLM_API_KEY=sk-or-... python3 tests/llm/test.py
 """
 import json
 import os
@@ -238,7 +238,7 @@ def main():
         print()
         print("⏭  SKIP: LLM_API_KEY not set and OLLAMA not set.")
         print("   Options:")
-        print("     OLLAMA=1 python3 tests/level3a-llm-free/test.py  # local ollama")
+        print("     OLLAMA=1 python3 tests/llm/test.py  # local ollama")
         print("     LLM_API_KEY=sk-or-... python3 ...  # OpenRouter (free)")
         sys.exit(0)
 

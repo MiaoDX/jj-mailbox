@@ -1,177 +1,112 @@
-# jj-mailbox Testing Pyramid
+# jj-mailbox Tests
 
-Tests are organized in levels of increasing sophistication.
+| Test | Directory | LLM? | Secrets | CI |
+|------|-----------|-------|---------|----|
+| CLI protocol | (ci.yml) | No | None | auto |
+| Scripted agents | scripted/ | No | None | auto |
+| smolagents | smolagents/ | Yes | LLM_API_KEY | auto if secret |
+| LLM tool-calling | llm/ | Yes | LLM_API_KEY | auto if secret |
+| Comparison | comparison/ | No | None | manual/weekly |
+| OpenClaw | openclaw/ | Yes | LLM_API_KEY | auto if secret (Docker) |
 
-| Level | Directory | LLM? | Secrets | CI Trigger |
-|-------|-----------|-------|---------|------------|
-| 1 | (ci.yml) | No | None | auto, every push |
-| 2a | level2a-scripted/ | No | None | auto, every push |
-| 2b | level2b-smolagents/ | Yes, free | LLM_API_KEY | auto if secret |
-| 3a | level3a-llm-free/ | Yes, free | LLM_API_KEY | auto if secret |
-| 3b | level3b-llm-online/ | Yes, paid | LLM_API_KEY | manual only |
-| 4 | level4-comparison/ | Simulated | None | manual/weekly |
-| OC | openclaw/ | Yes | LLM_API_KEY | auto if secret (Docker) |
-
-All LLM tests are **model-pluggable** — any OpenAI-compatible provider works.
-See [docs/MODEL_CHOICES.md](../docs/MODEL_CHOICES.md) for provider comparison.
+All LLM tests use OpenRouter via `LLM_API_KEY`. One secret for everything.
+See [docs/MODEL_CHOICES.md](../docs/MODEL_CHOICES.md) for provider details.
 
 ---
 
-## Level 1 — Bash CLI tests
-
-**Workflow:** [`.github/workflows/ci.yml`](../.github/workflows/ci.yml)
+## CLI protocol (ci.yml)
 
 Tests the raw protocol: init, register, send, inbox, read, bidirectional, status,
 multi-agent broadcast, multi-turn threading with refs chain.
 
 ```bash
-# No local setup needed — runs in CI automatically.
-# To run manually, see individual test steps in ci.yml
+# Runs in CI automatically. See .github/workflows/ci.yml for steps.
 ```
 
 ---
 
-## Level 2a — Python scripted agents
-
-**Workflow:** [`.github/workflows/ci-level2a.yml`](../.github/workflows/ci-level2a.yml)
+## Scripted agents
 
 Deterministic, no LLM, stdlib only. Tests refs chain and shared artifacts.
 
 ```bash
-# No pip install needed
-python3 tests/level2a-scripted/test.py
+python3 tests/scripted/test.py
 ```
 
-**What's tested:**
-- 3-turn conversation: Planner → Researcher → Planner
-- `refs` field chains correctly across turns
-- Messages move from `new/` to `processed/` after reading
-- Shared artifact written to `shared/artifacts/`
+**Scenario:** 3-turn Planner → Researcher → Planner conversation.
 
 ---
 
-## Level 2b — smolagents with tiny HF model
+## smolagents
 
-**Workflow:** [`.github/workflows/ci-level2b.yml`](../.github/workflows/ci-level2b.yml)
-
-Uses `smolagents` + `Qwen/Qwen2.5-0.5B-Instruct` (free with HF_TOKEN). The jj-mailbox
-CLI is wrapped as smolagents `Tool` subclasses so the LLM can call them.
+Uses the [smolagents](https://github.com/huggingface/smolagents) framework with jj-mailbox
+CLI wrapped as `Tool` subclasses.
 
 ```bash
-pip install -r tests/level2b-smolagents/requirements.txt
-export HF_TOKEN=hf_...
-python3 tests/level2b-smolagents/test.py
-```
-
-Skips gracefully if `HF_TOKEN` is not set.
-
----
-
-## Level 3a — Tool-calling LLM agent (free model)
-
-**Workflow:** [`.github/workflows/ci-level3a.yml`](../.github/workflows/ci-level3a.yml)
-
-Uses OpenAI function calling with a free model. Any provider works (see [docs/MODEL_CHOICES.md](../docs/MODEL_CHOICES.md)).
-
-```bash
-pip install openai
-
-# Option A: local ollama
-export OLLAMA=1  # auto-configures localhost:11434 + qwen2.5:0.5b
-
-# Option B: OpenRouter (default, free)
+pip install -r tests/smolagents/requirements.txt
 export LLM_API_KEY=sk-or-...
-
-# Option C: any provider
-export LLM_API_KEY=gsk_... LLM_API_BASE=https://api.groq.com/openai/v1 LLM_MODEL=llama-3.3-70b-versatile
-
-python3 tests/level3a-llm-free/test.py
+python3 tests/smolagents/test.py
 ```
 
-Skips gracefully if `LLM_API_KEY` is not set and `OLLAMA` is not set.
-
-**Scenario:** 3-round code review — Alice proposes a function, Bob reviews, Alice incorporates feedback.
+**Scenario:** Alice sends Bob a caching design question, Bob reads and replies.
 
 ---
 
-## Level 3b — Tool-calling LLM agent (quality model)
+## LLM tool-calling
 
-**Workflow:** [`.github/workflows/ci-level3b.yml`](../.github/workflows/ci-level3b.yml) — manual trigger only
-
-Same structure as 3a but uses Kimi (moonshot-v1-8k) by default and runs a more complex
-3-agent (Planner + Researcher + Critic), 5-round scenario.
+Uses OpenAI function calling directly. Any OpenAI-compatible provider works.
 
 ```bash
 pip install openai
-export LLM_API_KEY=sk-...
-export LLM_API_BASE=https://api.moonshot.cn/v1
-export LLM_MODEL=moonshot-v1-8k
-python3 tests/level3b-llm-online/test.py
+export LLM_API_KEY=sk-or-...
+python3 tests/llm/test.py
 ```
+
+**Scenario:** 3-round code review — Alice proposes, Bob reviews, Alice incorporates.
 
 ---
 
-## Level 4 — Slack-style vs jj-mailbox comparison
-
-**Workflow:** [`.github/workflows/ci-level4.yml`](../.github/workflows/ci-level4.yml) — manual / weekly
+## Comparison benchmark
 
 Runs the same 3-agent task with both an in-memory Slack simulation and real jj-mailbox,
-then generates a `COMPARISON.md` report highlighting structural differences.
+then generates a `COMPARISON.md` report.
 
 ```bash
-# No pip install, no secrets needed
-python3 tests/level4-comparison/benchmark.py
-cat tests/level4-comparison/COMPARISON.md
+python3 tests/comparison/benchmark.py
 ```
 
 ---
 
-## OpenClaw integration test
+## OpenClaw integration
 
-**Directory:** `tests/openclaw/`
-
-Five OpenClaw agents (alice, bob, carol, dave, eve) in Docker, sharing one jj repo volume.
-Tests: OpenClaw agent → reads SKILL.md → uses jj-mailbox CLI → shared jj repo.
+Five OpenClaw agents in Docker, sharing one jj repo volume.
 
 ```bash
 cd tests/openclaw
 
-# CLI-only: 30 messages across 5 agents, no API key needed
-./test.sh --no-llm
+./test.sh --no-llm      # CLI-only, 30 messages, 5 agents
+./test.sh --llm-smoke   # 1 real OpenClaw agent turn + verify
+./test.sh               # both
 
-# LLM smoke: 1 real OpenClaw agent turn, verify mailbox receipt
-./test.sh --llm-smoke
-
-# Full: LLM smoke + 30-message CLI round-robin
-./test.sh
-
-# Explicit provider:
+# Or with explicit key:
 LLM_API_KEY=sk-or-... ./test.sh
 ```
 
-Requires Docker. Builds on `ghcr.io/openclaw/openclaw:latest`.
-
-**`.env` auto-loading:** If `LLM_API_KEY` is not in the environment, `test.sh` sources `../../.env` automatically.
-
-**`--no-llm` mode:** 30 CLI messages in round-robin across 5 agents. No OpenClaw agent invocation.
-
-**`--llm-smoke` mode:** Runs 1 real OpenClaw agent turn (alice → bob), verifies the mailbox received a message regardless of content. Falls back to CLI if the model doesn't use the skill.
+`.env` auto-loading: if `LLM_API_KEY` is not exported, `test.sh` sources `../../.env`.
 
 ---
 
-## Running all auto levels locally
+## Running locally
 
 ```bash
-# Prerequisites: jj installed, git configured
 chmod +x bin/jj-mailbox
 
-# Level 1 (manual equivalent)
-bin/jj-mailbox init /tmp/test && cd /tmp/test
-# ... (see ci.yml for steps)
+# No-LLM tests (always work)
+python3 tests/scripted/test.py
+python3 tests/comparison/benchmark.py
 
-# Level 2a (no installs)
-python3 tests/level2a-scripted/test.py
-
-# Level 4 (no installs)
-python3 tests/level4-comparison/benchmark.py
+# LLM tests (need LLM_API_KEY in .env or exported)
+pip install openai 'smolagents[openai]'
+python3 tests/llm/test.py
+python3 tests/smolagents/test.py
 ```
