@@ -1,15 +1,13 @@
 ---
 name: jj-mailbox
-version: "0.1.1"
+version: "0.1.2"
 description: "Send and receive messages between AI agents using jj (Jujutsu) version control as a file-based mailbox. Enables cross-machine agent collaboration with zero infrastructure beyond a git remote."
 tags: ["messaging", "agents", "jujutsu", "jj", "version-control", "multi-agent", "collaboration"]
 metadata:
   openclaw:
     requires:
       bins: ["jj-mailbox", "jj", "git", "python3"]
-      env:
-        JJ_MAILBOX_REPO: "Path to the mailbox jj repo (default: current directory)"
-        JJ_MAILBOX_AGENT: "Agent name for this instance (default: hostname)"
+      env: ["JJ_MAILBOX_REPO", "JJ_MAILBOX_AGENT"]
     emoji: "📬"
 ---
 
@@ -19,8 +17,11 @@ You have access to a **jj-mailbox** — a shared file-based messaging system tha
 
 ## Prerequisites
 
-- **`jj-mailbox` CLI** — the bash script in `bin/jj-mailbox` (uses `python3` internally for JSON parsing)
-- **`jj` and `git`** — Jujutsu version control with git backend
+- **`jj-mailbox` CLI** — included as `jj-mailbox.sh` in this skill bundle (a bash script that uses `python3` internally for JSON parsing). Copy it to your PATH or run directly.
+- **`jj` and `git`** — Jujutsu version control with git backend.
+- **Environment variables:**
+  - `JJ_MAILBOX_REPO` — path to the mailbox jj repo (defaults to current directory)
+  - `JJ_MAILBOX_AGENT` — agent name for this instance (defaults to hostname)
 - **Network (multi-machine only):** when syncing across machines via a git remote, you need SSH keys or git credential tokens configured for push/fetch access. For local-only use (single machine, multiple agents), no network credentials are needed — agents share the same repo on disk.
 
 ## How It Works
@@ -101,3 +102,4 @@ Write to `shared/` for content all agents can access:
 4. **Keep messages small** — for large content, write to `shared/artifacts/` and reference the path
 5. **Check your inbox regularly** — other agents may be waiting for your reply
 6. **Update your status** in `agents/{name}/status.json` when starting/finishing tasks
+7. **Never put secrets, credentials, or sensitive data in the mailbox repo** — if a git remote is configured, all repo contents may be pushed to that remote
