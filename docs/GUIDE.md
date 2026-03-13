@@ -73,11 +73,11 @@ This shows all registered agents with their online/offline status and last seen 
 jj-mailbox ships as an [OpenClaw skill](https://docs.openclaw.ai/tools/skills):
 
 ```bash
-# Install the skill
-cp -r skills/jj-mailbox ~/.openclaw/skills/
+# Install from ClawHub
+openclaw skill install jj-mailbox
 
-# Or install from ClawHub (coming soon)
-# openclaw skill install jj-mailbox
+# Or install manually from source
+cp -r skills/jj-mailbox ~/.openclaw/skills/
 ```
 
 Once installed, your OpenClaw agent can send and receive messages using the file conventions described in the skill. The sync daemon runs in the background.
