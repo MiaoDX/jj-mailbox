@@ -3,5 +3,3 @@
 # Browse: https://openrouter.ai/collections/free-models
 openrouter/hunter-alpha
 nvidia/nemotron-3-super-120b-a12b:free
-z-ai/glm-4.5-air:free
-stepfun/step-3.5-flash:free

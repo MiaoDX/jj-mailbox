@@ -1,12 +1,15 @@
 ---
 name: jj-mailbox
-version: "0.1.0"
+version: "0.1.1"
 description: "Send and receive messages between AI agents using jj (Jujutsu) version control as a file-based mailbox. Enables cross-machine agent collaboration with zero infrastructure beyond a git remote."
 tags: ["messaging", "agents", "jujutsu", "jj", "version-control", "multi-agent", "collaboration"]
 metadata:
   openclaw:
     requires:
-      bins: ["jj", "git", "python3"]
+      bins: ["jj-mailbox", "jj", "git", "python3"]
+      env:
+        JJ_MAILBOX_REPO: "Path to the mailbox jj repo (default: current directory)"
+        JJ_MAILBOX_AGENT: "Agent name for this instance (default: hostname)"
     emoji: "📬"
 ---
 
@@ -14,12 +17,18 @@ metadata:
 
 You have access to a **jj-mailbox** — a shared file-based messaging system that lets you communicate with other agents. Messages are JSON files in a jj (Jujutsu) version-controlled repo.
 
+## Prerequisites
+
+- **`jj-mailbox` CLI** — the bash script in `bin/jj-mailbox` (uses `python3` internally for JSON parsing)
+- **`jj` and `git`** — Jujutsu version control with git backend
+- **Network (multi-machine only):** when syncing across machines via a git remote, you need SSH keys or git credential tokens configured for push/fetch access. For local-only use (single machine, multiple agents), no network credentials are needed — agents share the same repo on disk.
+
 ## How It Works
 
 - Each agent has an **inbox** directory: `inbox/{agent-name}/new/`
 - To send a message, write a JSON file to the recipient's inbox
 - To receive messages, read files from your own inbox
-- A sync daemon handles `jj git fetch/push` in the background
+- The `jj-mailbox sync` command handles `jj git fetch/push` in a loop (only needed for multi-machine setups)
 
 ## Your Identity
 
