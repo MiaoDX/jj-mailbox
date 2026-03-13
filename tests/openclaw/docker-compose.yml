@@ -44,7 +44,7 @@ services:
             --skip-channels --skip-daemon --skip-health --skip-search --skip-skills --skip-ui \
             2>/dev/null || true;
         fi;
-        openclaw models set openrouter/openrouter/free 2>/dev/null || true;
+        openclaw models set openrouter/openrouter/hunter-alpha 2>/dev/null || true;
         cd /mailbox;
         if [ ! -d .jj ]; then jj git init --colocate; fi;
         jj-mailbox register alice 'Research specialist';
@@ -71,7 +71,7 @@ services:
             --skip-channels --skip-daemon --skip-health --skip-search --skip-skills --skip-ui \
             2>/dev/null || true;
         fi;
-        openclaw models set openrouter/openrouter/free 2>/dev/null || true;
+        openclaw models set openrouter/openrouter/hunter-alpha 2>/dev/null || true;
         until [ -d /mailbox/.jj ]; do sleep 1; done;
         sleep 2;
         jj-mailbox register bob 'Code review specialist';
@@ -98,7 +98,7 @@ services:
             --skip-channels --skip-daemon --skip-health --skip-search --skip-skills --skip-ui \
             2>/dev/null || true;
         fi;
-        openclaw models set openrouter/openrouter/free 2>/dev/null || true;
+        openclaw models set openrouter/openrouter/hunter-alpha 2>/dev/null || true;
         until [ -d /mailbox/.jj ]; do sleep 1; done;
         sleep 4;
         jj-mailbox register carol 'Testing engineer';
@@ -125,7 +125,7 @@ services:
             --skip-channels --skip-daemon --skip-health --skip-search --skip-skills --skip-ui \
             2>/dev/null || true;
         fi;
-        openclaw models set openrouter/openrouter/free 2>/dev/null || true;
+        openclaw models set openrouter/openrouter/hunter-alpha 2>/dev/null || true;
         until [ -d /mailbox/.jj ]; do sleep 1; done;
         sleep 6;
         jj-mailbox register dave 'DevOps engineer';
@@ -152,7 +152,7 @@ services:
             --skip-channels --skip-daemon --skip-health --skip-search --skip-skills --skip-ui \
             2>/dev/null || true;
         fi;
-        openclaw models set openrouter/openrouter/free 2>/dev/null || true;
+        openclaw models set openrouter/openrouter/hunter-alpha 2>/dev/null || true;
         until [ -d /mailbox/.jj ]; do sleep 1; done;
         sleep 8;
         jj-mailbox register eve 'Security analyst';
