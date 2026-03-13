@@ -1,6 +1,8 @@
 ---
 name: jj-mailbox
+version: "0.1.0"
 description: "Send and receive messages between AI agents using jj (Jujutsu) version control as a file-based mailbox. Enables cross-machine agent collaboration with zero infrastructure beyond a git remote."
+tags: ["messaging", "agents", "jujutsu", "jj", "version-control", "multi-agent", "collaboration"]
 metadata:
   openclaw:
     requires:

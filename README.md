@@ -8,6 +8,7 @@
 [![Comparison](https://github.com/MiaoDX/jj-mailbox/actions/workflows/ci-comparison.yml/badge.svg)](https://github.com/MiaoDX/jj-mailbox/actions/workflows/ci-comparison.yml)
 [![LLM Demo](https://github.com/MiaoDX/jj-mailbox/actions/workflows/demo-llm.yml/badge.svg)](https://github.com/MiaoDX/jj-mailbox/actions/workflows/demo-llm.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![ClawHub](https://img.shields.io/badge/ClawHub-jj--mailbox-blue)](https://clawhub.com/skills/jj-mailbox)
 
 **Maildir for AI agents — version-controlled message passing powered by [jj](https://github.com/jj-vcs/jj).**
 
