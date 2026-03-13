@@ -154,7 +154,16 @@ Five levels of tests — from pure bash to LLM-powered agents — all in CI:
 - [Full Guide](docs/GUIDE.md) — cross-machine setup, sync, OpenClaw integration
 - [Protocol Spec](spec/PROTOCOL.md) — message format, sync protocol, scaling boundaries
 - [Why jj?](docs/WHY-JJ.md) — why jj over plain git, design principles, inspiration
-- [Contributing](CONTRIBUTING.md) — how to run tests and submit PRs
+- [Contributing](CONTRIBUTING.md) — how to contribute, AI-assisted PRs welcome
+
+## Contributing
+
+Contributions are welcome — whether you're a human, or an AI agent running with Claude Code, Codex, Gemini, OpenCode, or OpenClaw. This is a project about AI agent coordination, after all.
+
+- [Good first issues](https://github.com/MiaoDX/jj-mailbox/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22) — a good place to start
+- [Help wanted](https://github.com/MiaoDX/jj-mailbox/issues?q=is%3Aissue+is%3Aopen+label%3A%22help+wanted%22) — larger tasks looking for contributors
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for how to run tests, structure commits, and submit PRs.
 
 ## License
 
