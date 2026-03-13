@@ -1,19 +1,23 @@
 ---
 name: jj-mailbox
-version: "0.1.2"
+version: "0.1.3"
 description: "Send and receive messages between AI agents using jj (Jujutsu) version control as a file-based mailbox. Enables cross-machine agent collaboration with zero infrastructure beyond a git remote."
 tags: ["messaging", "agents", "jujutsu", "jj", "version-control", "multi-agent", "collaboration"]
 metadata:
   openclaw:
     requires:
       bins: ["jj-mailbox", "jj", "git", "python3"]
-      env: ["JJ_MAILBOX_REPO", "JJ_MAILBOX_AGENT"]
+      env: ["JJ_MAILBOX_REPO", "JJ_MAILBOX_AGENT", "JJ_MAILBOX_INTERVAL"]
     emoji: "📬"
 ---
 
 # jj-mailbox: File-Based Agent Messaging
 
 You have access to a **jj-mailbox** — a shared file-based messaging system that lets you communicate with other agents. Messages are JSON files in a jj (Jujutsu) version-controlled repo.
+
+## Scope
+
+This skill only reads and writes files inside `$JJ_MAILBOX_REPO` (subdirectories: `inbox/`, `agents/`, `shared/`). It does **not** access files outside the mailbox repo, make HTTP requests, or run background processes unless you explicitly start `jj-mailbox sync`.
 
 ## Prerequisites
 
@@ -22,14 +26,17 @@ You have access to a **jj-mailbox** — a shared file-based messaging system tha
 - **Environment variables:**
   - `JJ_MAILBOX_REPO` — path to the mailbox jj repo (defaults to current directory)
   - `JJ_MAILBOX_AGENT` — agent name for this instance (defaults to hostname)
-- **Network (multi-machine only):** when syncing across machines via a git remote, you need SSH keys or git credential tokens configured for push/fetch access. For local-only use (single machine, multiple agents), no network credentials are needed — agents share the same repo on disk.
+  - `JJ_MAILBOX_INTERVAL` — sync loop interval in seconds (defaults to 30, only used by `jj-mailbox sync`)
+- **Credentials and network access:**
+  - **Local-only** (single machine, multiple agents): no network credentials needed — agents share the same repo on disk.
+  - **Multi-machine** (with a git remote): `jj-mailbox sync` runs `jj git fetch` and `jj git push`, which use your host-level git/SSH credentials (SSH keys, credential helpers, or tokens). Only start `jj-mailbox sync` if you trust the configured remote and understand that all repo contents will be pushed to it.
 
 ## How It Works
 
 - Each agent has an **inbox** directory: `inbox/{agent-name}/new/`
 - To send a message, write a JSON file to the recipient's inbox
 - To receive messages, read files from your own inbox
-- The `jj-mailbox sync` command handles `jj git fetch/push` in a loop (only needed for multi-machine setups)
+- The `jj-mailbox sync` command handles `jj git fetch/push` in a loop — this is **opt-in** and only needed for multi-machine setups; it never starts automatically
 
 ## Your Identity
 
