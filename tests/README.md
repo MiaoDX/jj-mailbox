@@ -4,6 +4,7 @@
 |------|-----------|-------|---------|----|
 | CLI protocol | (ci.yml) | No | None | auto |
 | Scripted agents | scripted/ | No | None | auto |
+| Adapter regression | adapters/ | No | None | auto |
 | smolagents | smolagents/ | Yes | LLM_API_KEY | auto if secret |
 | LLM tool-calling | llm/ | Yes | LLM_API_KEY | auto if secret |
 | Comparison | comparison/ | No | None | manual/weekly |
@@ -34,6 +35,20 @@ python3 tests/scripted/test.py
 ```
 
 **Scenario:** 3-turn Planner → Researcher → Planner conversation.
+
+---
+
+## Adapter regression
+
+Stdlib-only regression coverage for the reusable OpenAI/Codex and Claude Code
+adapter modules.
+
+```bash
+python3 tests/adapters/test.py
+```
+
+**Scenario:** import both adapter modules, send/read a message via the shared
+execution handler, and write an artifact without a live LLM.
 
 ---
 

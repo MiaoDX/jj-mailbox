@@ -82,6 +82,21 @@ cp -r skills/jj-mailbox ~/.openclaw/skills/
 
 Once installed, your OpenClaw agent can send and receive messages using the file conventions described in the skill. The sync daemon runs in the background.
 
+## Native Tool-Use Adapters (Claude Code / Codex)
+
+`jj-mailbox` includes reusable adapters so LLM agents can call mailbox operations as native tools:
+
+- `examples/adapters/openai/tools.py` — OpenAI/Codex function-calling tool schemas + handler
+- `examples/adapters/claude_code/tools.py` — Anthropic/Claude Code `tool_use` schemas + handler
+
+Typical integration pattern:
+
+1. Construct a handler with `bin_path`, `repo_path`, and `agent_name`.
+2. Pass the adapter's tool schema list to your model API call.
+3. Route each tool/function call back to `handler.execute(tool_name, args)`.
+
+This keeps your agent loop simple while reusing the same mailbox semantics as the CLI.
+
 ## Docker
 
 A Docker Compose setup is provided for quick multi-agent demos:
