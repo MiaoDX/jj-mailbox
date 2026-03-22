@@ -27,8 +27,10 @@ REPO_ROOT = os.path.dirname(os.path.dirname(SCRIPT_DIR))
 BIN = os.path.join(REPO_ROOT, "bin", "jj-mailbox")
 
 # Import shared helpers
+sys.path.insert(0, REPO_ROOT)
 sys.path.insert(0, os.path.join(SCRIPT_DIR, ".."))
 from _helpers import run_cli, setup_repo as _setup_repo, cleanup_repo
+from examples.adapters.openai.tools import OPENAI_TOOLS, JjMailboxOpenAITools
 
 # Config from environment (defaults to OpenRouter)
 LLM_API_KEY = os.environ.get("LLM_API_KEY", "")
@@ -41,98 +43,11 @@ MAX_TURNS = 6  # max tool-calling turns per agent per round
 class GracefulSkip(Exception):
     """Raised when the test should be skipped cleanly (exit 0)."""
 
-# --- OpenAI tool schemas ---
-TOOLS = [
-    {
-        "type": "function",
-        "function": {
-            "name": "send_message",
-            "description": "Send a message to another agent",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "to": {"type": "string", "description": "Recipient agent name"},
-                    "subject": {"type": "string", "description": "Message subject"},
-                    "body": {"type": "string", "description": "Message body"},
-                    "refs": {
-                        "type": "string",
-                        "description": "Comma-separated IDs of messages being replied to (optional)",
-                    },
-                },
-                "required": ["to", "subject", "body"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "read_inbox",
-            "description": "Read the oldest unread message from inbox. Returns message JSON or empty string.",
-            "parameters": {"type": "object", "properties": {}, "required": []},
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "write_artifact",
-            "description": "Write content to a shared artifact file in shared/artifacts/",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "filename": {"type": "string", "description": "File name (e.g. design.md)"},
-                    "content": {"type": "string", "description": "File content to write"},
-                },
-                "required": ["filename", "content"],
-            },
-        },
-    },
-]
+TOOLS = OPENAI_TOOLS
 
 
 def setup_repo():
     return _setup_repo(BIN, [("alice", "Function designer"), ("bob", "Code reviewer")], prefix="jj-mailbox-3a-")
-
-
-def execute_tool(name, args, agent_name, repo):
-    """Execute a tool call and return string result."""
-    if name == "send_message":
-        to = args.get("to", "").lower().strip()
-        subject = args.get("subject", "")
-        body = args.get("body", "")
-        refs = args.get("refs", "")
-        cmd = [BIN, "send", to, subject, body]
-        if refs:
-            cmd += ["--refs", refs]
-        stdout, stderr, code = run_cli(cmd, env={"JJ_MAILBOX_REPO": repo, "JJ_MAILBOX_AGENT": agent_name}, check=False)
-        if code != 0:
-            return f"Error sending message: {stderr}"
-        lines = [l for l in stdout.splitlines() if l.strip()]
-        msg_id = lines[-1] if lines else "unknown"
-        return f"Message sent. ID: {msg_id}"
-
-    elif name == "read_inbox":
-        stdout, stderr, code = run_cli(
-            [BIN, "read", agent_name],
-            env={"JJ_MAILBOX_REPO": repo, "JJ_MAILBOX_AGENT": agent_name},
-            check=False,
-        )
-        if not stdout:
-            return "Inbox is empty."
-        try:
-            msg = json.loads(stdout)
-            return json.dumps(msg, indent=2)
-        except json.JSONDecodeError:
-            return stdout
-
-    elif name == "write_artifact":
-        filename = args.get("filename", "artifact.txt")
-        content = args.get("content", "")
-        path = os.path.join(repo, "shared", "artifacts", filename)
-        with open(path, "w") as f:
-            f.write(content)
-        return f"Artifact written: shared/artifacts/{filename}"
-
-    return f"Unknown tool: {name}"
 
 
 def run_agent(agent_name, system_prompt, user_prompt, repo, client, log):
@@ -143,6 +58,7 @@ def run_agent(agent_name, system_prompt, user_prompt, repo, client, log):
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": user_prompt},
     ]
+    tool_handler = JjMailboxOpenAITools(bin_path=BIN, repo_path=repo, agent_name=agent_name)
 
     for turn in range(MAX_TURNS):
         # Always use "auto" — many free model providers reject "required"
@@ -210,7 +126,7 @@ def run_agent(agent_name, system_prompt, user_prompt, repo, client, log):
             if not isinstance(args, dict):
                 print(f"  [{agent_name}] Malformed tool args (got {type(args).__name__}), skipping")
                 args = {}
-            result = execute_tool(tc.function.name, args, agent_name, repo)
+            result = tool_handler.execute(tc.function.name, args)
             print(f"  [{agent_name}] tool: {tc.function.name}({args}) → {result[:80]}")
             log.append({"agent": agent_name, "type": "tool_call", "tool": tc.function.name, "args": args, "result": result})
             messages.append({

@@ -178,6 +178,13 @@ This protocol is designed for **small-to-medium coordination**:
 
 ## Compatibility
 
+| Platform | Integration mode | Notes |
+|----------|------------------|-------|
+| OpenClaw | Native skill (`skills/jj-mailbox/`) | File-first workflow with sync daemon support |
+| Codex / OpenAI function calling | Adapter (`examples/adapters/openai/tools.py`) | Exposes `send_message`, `read_inbox`, `write_artifact` |
+| Claude Code / Anthropic tool_use | Adapter (`examples/adapters/claude_code/tools.py`) | Same mailbox operations via `input_schema` tools |
+| Any file-aware agent | Direct protocol use | Read/write files in `inbox/`, `agents/`, `shared/` |
+
 ### Single-machine (OpenClaw multi-agent)
 
 Same protocol, skip git push/fetch. Agents share the same local jj repo.
