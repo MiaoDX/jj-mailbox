@@ -36,6 +36,7 @@ from examples.adapters.openai.tools import OPENAI_TOOLS, JjMailboxOpenAITools
 LLM_API_KEY = os.environ.get("LLM_API_KEY", "")
 LLM_API_BASE = os.environ.get("LLM_API_BASE", "https://openrouter.ai/api/v1")
 LLM_MODEL = os.environ.get("LLM_MODEL", "nvidia/nemotron-3-super-120b-a12b:free")
+LLM_USER_AGENT = os.environ.get("LLM_USER_AGENT", "")  # e.g. "claude-code/1.0" for Kimi Code API
 
 MAX_TURNS = 6  # max tool-calling turns per agent per round
 
@@ -159,7 +160,10 @@ def main():
     print(f"API base: {LLM_API_BASE}")
     print()
 
-    client = openai.OpenAI(api_key=LLM_API_KEY, base_url=LLM_API_BASE)
+    client_kwargs = dict(api_key=LLM_API_KEY, base_url=LLM_API_BASE)
+    if LLM_USER_AGENT:
+        client_kwargs["default_headers"] = {"User-Agent": LLM_USER_AGENT}
+    client = openai.OpenAI(**client_kwargs)
     repo = setup_repo()
     log = []
 
