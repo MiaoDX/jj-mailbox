@@ -46,6 +46,17 @@ JJ_MAILBOX_AGENT=alice jj-mailbox sync
 
 The daemon updates your agent's `status.json` automatically so other agents can see you're online.
 
+## Watch Mode
+
+Use `watch` alongside the sync daemon when you want instant local inbox notifications as soon as fetched messages land on disk:
+
+```bash
+# Run next to `jj-mailbox sync`
+JJ_MAILBOX_AGENT=alice jj-mailbox watch --exec "jj-mailbox read"
+```
+
+`watch` prefers `inotifywait` on Linux and `fswatch` on macOS, and falls back to 3-second polling when neither tool is available.
+
 ## Sending and Receiving Messages
 
 ```bash

@@ -29,6 +29,7 @@ Usage:
   jj-mailbox inbox [--agent <name>]                    Check inbox
   jj-mailbox thread <msg-id>                           Show a conversation thread
   jj-mailbox sync [--interval <seconds>]               Run sync loop
+  jj-mailbox watch [--agent <name>] [--exec <command>] Watch inbox for new local messages
   jj-mailbox status                                    Show all agents' status
   jj-mailbox help                                      Show this help
 
@@ -87,6 +88,34 @@ ts_iso() {
 }
 
 # --- Commands ---
+
+run_exec_hook() {
+  local exec_cmd="${1:-}"
+  [[ -z "${exec_cmd}" ]] && return 0
+
+  log "Running hook: ${exec_cmd}"
+  bash -lc "${exec_cmd}"
+}
+
+watch_with_polling() {
+  local inbox_dir="${1:?}"
+  local exec_cmd="${2:-}"
+  local poll_interval="${3:-3}"
+  local baseline=0
+
+  baseline=$(find "${inbox_dir}" -maxdepth 1 -name '*.json' 2>/dev/null | wc -l | tr -d ' ')
+  while true; do
+    local count
+    count=$(find "${inbox_dir}" -maxdepth 1 -name '*.json' 2>/dev/null | wc -l | tr -d ' ')
+    if [[ "${count}" -gt "${baseline}" ]]; then
+      local delta=$((count - baseline))
+      ok "📬 ${delta} new message(s) detected"
+      run_exec_hook "${exec_cmd}"
+    fi
+    baseline="${count}"
+    sleep "${poll_interval}"
+  done
+}
 
 cmd_init() {
   ensure_jj
@@ -479,6 +508,65 @@ with open(path, 'r+') as f:
   done
 }
 
+cmd_watch() {
+  ensure_repo
+  local agent="$(get_agent)"
+  local exec_cmd=""
+  local repo
+  repo="$(get_repo)"
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --agent)
+        agent="${2:?Usage: jj-mailbox watch [--agent <name>] [--exec <command>]}"
+        shift 2
+        ;;
+      --exec)
+        exec_cmd="${2:?Usage: jj-mailbox watch [--agent <name>] [--exec <command>]}"
+        shift 2
+        ;;
+      *)
+        err "Unknown option for watch: $1"
+        exit 1
+        ;;
+    esac
+  done
+
+  cd "${repo}"
+
+  local inbox_dir="inbox/${agent}/new"
+  if [[ ! -d "${inbox_dir}" ]]; then
+    err "No inbox for agent: ${agent}"
+    exit 1
+  fi
+
+  log "Watching ${inbox_dir} for new messages"
+  if [[ -n "${exec_cmd}" ]]; then
+    log "Hook command enabled"
+  fi
+  log "Press Ctrl+C to stop."
+
+  if [[ "${JJ_MAILBOX_FORCE_POLL:-0}" == "1" ]]; then
+    warn "Forced polling mode enabled"
+    watch_with_polling "${inbox_dir}" "${exec_cmd}" 3
+  elif command -v inotifywait >/dev/null 2>&1; then
+    inotifywait -m -e create --format '%f' "${inbox_dir}" | while read -r file; do
+      [[ "${file}" == *.json ]] || continue
+      ok "📬 New message detected: ${file}"
+      run_exec_hook "${exec_cmd}"
+    done
+  elif command -v fswatch >/dev/null 2>&1; then
+    fswatch -0 "${inbox_dir}" | while IFS= read -r -d '' file; do
+      [[ "${file}" == *.json ]] || continue
+      ok "📬 New message detected: $(basename "${file}")"
+      run_exec_hook "${exec_cmd}"
+    done
+  else
+    warn "No inotifywait or fswatch found, falling back to 3s polling"
+    watch_with_polling "${inbox_dir}" "${exec_cmd}" 3
+  fi
+}
+
 cmd_status() {
   ensure_repo
   local repo
@@ -535,6 +623,7 @@ main() {
     thread)   cmd_thread "$@" ;;
     read)     cmd_read_and_process "$@" ;;
     sync)     cmd_sync "$@" ;;
+    watch)    cmd_watch "$@" ;;
     status)   cmd_status "$@" ;;
     version)  echo "jj-mailbox v${VERSION}" ;;
     help|*)   usage ;;
