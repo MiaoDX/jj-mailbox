@@ -5,6 +5,7 @@
 | CLI protocol | (ci.yml) | No | None | auto |
 | Scripted agents | scripted/ | No | None | auto |
 | Adapter regression | adapters/ | No | None | auto |
+| MCP wrapper | mcp/ | No | None | auto |
 | smolagents | smolagents/ | Yes | LLM_API_KEY | auto if secret |
 | LLM tool-calling | llm/ | Yes | LLM_API_KEY | auto if secret |
 | Comparison | comparison/ | No | None | manual/weekly |
@@ -49,6 +50,21 @@ python3 tests/adapters/test.py
 
 **Scenario:** import both adapter modules, send/read a message via the shared
 execution handler, and write an artifact without a live LLM.
+
+---
+
+## MCP wrapper
+
+Stdlib-only regression coverage for the FastMCP server wrapper. The test injects
+a fake `FastMCP` implementation so it can validate tool registration and CLI
+dispatch without installing the MCP SDK.
+
+```bash
+python3 tests/mcp/test.py
+```
+
+**Scenario:** register the MCP tool set, send/read a message through the wrapper,
+check status output, and verify artifact writes stay inside `shared/artifacts/`.
 
 ---
 
@@ -118,6 +134,8 @@ chmod +x bin/jj-mailbox
 
 # No-LLM tests (always work)
 python3 tests/scripted/test.py
+python3 tests/adapters/test.py
+python3 tests/mcp/test.py
 python3 tests/comparison/benchmark.py
 
 # LLM tests (need LLM_API_KEY in .env or exported)
