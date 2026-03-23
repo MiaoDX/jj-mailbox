@@ -81,7 +81,7 @@ Fields:
 | `timestamp` | yes | UTC ISO 8601 |
 | `from` | yes | Sender agent name |
 | `to` | yes | Recipient agent name |
-| `type` | yes | `message`, `task`, `reply`, `broadcast` |
+| `type` | yes | See Message Types below |
 | `subject` | no | Short summary |
 | `body` | yes | Message content (plain text or markdown) |
 | `refs` | no | Array of referenced message IDs (for threading) |
@@ -89,10 +89,19 @@ Fields:
 
 ### Message Types
 
+Core types:
 - **`message`** — general communication
 - **`task`** — request for the recipient to do something
 - **`reply`** — response to a previous message (use `refs` to link)
 - **`broadcast`** — informational, no response expected
+
+Lifecycle types (v0.2):
+- **`idle`** — agent is idle and available for work
+- **`approval_request`** — request human/agent approval before proceeding
+- **`approval_response`** — approval or rejection in response to a request
+- **`shutdown`** — agent is shutting down
+
+Agents that don't understand a lifecycle type can safely fall back to reading the `body`.
 
 ## Agent Profile
 
@@ -120,7 +129,7 @@ Fields:
 }
 ```
 
-Status values: `online`, `busy`, `offline`
+Status values: `online`, `busy`, `offline`, `idle`, `waiting_approval`
 
 ## Operations
 

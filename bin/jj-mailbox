@@ -25,7 +25,10 @@ jj-mailbox v${VERSION} — file-based message passing for AI agents
 Usage:
   jj-mailbox init <repo-path> [--remote <git-url>]    Initialize a mailbox repo
   jj-mailbox register <name> [--desc <description>]    Register an agent
-  jj-mailbox send <to> <subject> <body> [--refs <ids>]  Send a message (--refs: comma-separated message ids)
+  jj-mailbox send <to> <subject> <body> [--refs <ids>] [--type <kind>]
+                                                       Send a message
+    Types: message (default), task, reply, broadcast,
+           idle, approval_request, approval_response, shutdown
   jj-mailbox inbox [--agent <name>]                    Check inbox
   jj-mailbox thread <msg-id>                           Show a conversation thread
   jj-mailbox sync [--interval <seconds>]               Run sync loop
@@ -220,19 +223,27 @@ cmd_send() {
   local subject="${2:?}"
   local body="${3:?}"
   local refs_arg=""
+  local msg_type="message"
   local from
   from="$(get_agent)"
   local repo
   repo="$(get_repo)"
 
-  # Parse optional --refs flag (remaining args after positional 3)
+  # Parse optional flags (remaining args after positional 3)
   shift 3 || true
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --refs) refs_arg="${2:-}"; shift 2 ;;
+      --type) msg_type="${2:-}"; shift 2 ;;
       *) shift ;;
     esac
   done
+
+  # Validate message type
+  case "${msg_type}" in
+    message|task|reply|broadcast|idle|approval_request|approval_response|shutdown) ;;
+    *) err "Unsupported message type: ${msg_type}"; exit 1 ;;
+  esac
 
   cd "${repo}"
 
@@ -272,7 +283,7 @@ cmd_send() {
   "timestamp": "$(ts_iso)",
   "from": "${from}",
   "to": "${to}",
-  "type": "message",
+  "type": "${msg_type}",
   "subject": "${subject}",
   "body": "${body}",
   "refs": ${refs_json},
@@ -284,6 +295,7 @@ EOF
 
   ok "Message sent: ${from} → ${to}"
   log "  Subject: ${subject}"
+  log "  Type: ${msg_type}"
   log "  File: inbox/${to}/new/${filename}"
   log "  ID: ${msg_id}"
   echo "${msg_id}"
@@ -603,6 +615,8 @@ print(s.get('status','?'), s.get('last_seen','?'))
     [[ "${status}" == "online" ]] && status_icon="🟢"
     [[ "${status}" == "busy" ]] && status_icon="🟡"
     [[ "${status}" == "offline" ]] && status_icon="🔴"
+    [[ "${status}" == "idle" ]] && status_icon="💤"
+    [[ "${status}" == "waiting_approval" ]] && status_icon="🟣"
 
     echo -e "  ${status_icon} ${name}  (${status})  📬 ${inbox_count} msg  🕐 ${last_seen}"
   done
