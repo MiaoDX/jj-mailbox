@@ -94,7 +94,7 @@ run_exec_hook() {
   [[ -z "${exec_cmd}" ]] && return 0
 
   log "Running hook: ${exec_cmd}"
-  bash -lc "${exec_cmd}"
+  bash -c "${exec_cmd}"
 }
 
 watch_with_polling() {
@@ -556,7 +556,7 @@ cmd_watch() {
       run_exec_hook "${exec_cmd}"
     done
   elif command -v fswatch >/dev/null 2>&1; then
-    fswatch -0 "${inbox_dir}" | while IFS= read -r -d '' file; do
+    fswatch -0 --event Created "${inbox_dir}" | while IFS= read -r -d '' file; do
       [[ "${file}" == *.json ]] || continue
       ok "📬 New message detected: $(basename "${file}")"
       run_exec_hook "${exec_cmd}"
