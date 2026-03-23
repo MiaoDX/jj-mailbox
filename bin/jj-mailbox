@@ -27,6 +27,7 @@ Usage:
   jj-mailbox register <name> [--desc <description>]    Register an agent
   jj-mailbox send <to> <subject> <body> [--refs <ids>]  Send a message (--refs: comma-separated message ids)
   jj-mailbox inbox [--agent <name>]                    Check inbox
+  jj-mailbox thread <msg-id>                           Show a conversation thread
   jj-mailbox sync [--interval <seconds>]               Run sync loop
   jj-mailbox status                                    Show all agents' status
   jj-mailbox help                                      Show this help
@@ -299,6 +300,104 @@ print(m.get('from','?') + '\t' + m.get('subject','?') + '\t' + m.get('timestamp'
   echo ""
 }
 
+cmd_thread() {
+  ensure_repo
+  local msg_id="${1:?Usage: jj-mailbox thread <msg-id>}"
+  local repo
+  repo="$(get_repo)"
+  cd "${repo}"
+
+  python3 - "$msg_id" <<'PY'
+import json
+import os
+import sys
+from collections import defaultdict
+
+target_id = sys.argv[1]
+messages = {}
+children = defaultdict(list)
+
+for root, _, files in os.walk("inbox"):
+    for name in files:
+        if not name.endswith(".json"):
+            continue
+        path = os.path.join(root, name)
+        try:
+            with open(path) as f:
+                msg = json.load(f)
+        except (OSError, json.JSONDecodeError):
+            continue
+        msg_id = msg.get("id")
+        if not msg_id:
+            continue
+        msg["_path"] = path
+        msg.setdefault("refs", [])
+        messages[msg_id] = msg
+
+for msg in messages.values():
+    for ref in msg.get("refs", []):
+        if ref in messages:
+            children[ref].append(msg["id"])
+
+if target_id not in messages:
+    print(f"Message not found: {target_id}", file=sys.stderr)
+    sys.exit(1)
+
+component = set()
+stack = [target_id]
+while stack:
+    current = stack.pop()
+    if current in component:
+        continue
+    component.add(current)
+    msg = messages[current]
+    for ref in msg.get("refs", []):
+        if ref in messages:
+            stack.append(ref)
+    stack.extend(children.get(current, []))
+
+def in_component_refs(msg_id):
+    return [ref for ref in messages[msg_id].get("refs", []) if ref in component]
+
+roots = [
+    msg_id for msg_id in component
+    if not in_component_refs(msg_id)
+]
+if not roots:
+    roots = [target_id]
+
+def sort_key(msg_id):
+    msg = messages[msg_id]
+    return (msg.get("timestamp", ""), msg_id)
+
+turn = 0
+seen = set()
+
+def render(msg_id, depth):
+    global turn
+    if msg_id in seen:
+        return
+    seen.add(msg_id)
+    turn += 1
+    msg = messages[msg_id]
+    indent = "  " * depth
+    refs = [ref for ref in msg.get("refs", []) if ref]
+    refs_suffix = f"  [refs: {', '.join(refs)}]" if refs else ""
+    print(
+        f"{indent}Turn {turn}  "
+        f"{msg.get('from', '?')} → {msg.get('to', '?')}  "
+        f"\"{msg.get('subject', '?')}\"{refs_suffix}"
+    )
+    for child_id in sorted(children.get(msg_id, []), key=sort_key):
+        if child_id in component:
+            render(child_id, depth + 1)
+
+for root_id in sorted(roots, key=sort_key):
+    render(root_id, 0)
+
+PY
+}
+
 cmd_read_and_process() {
   # Read one message and move to processed
   ensure_repo
@@ -433,6 +532,7 @@ main() {
     register) cmd_register "$@" ;;
     send)     cmd_send "$@" ;;
     inbox)    cmd_inbox "$@" ;;
+    thread)   cmd_thread "$@" ;;
     read)     cmd_read_and_process "$@" ;;
     sync)     cmd_sync "$@" ;;
     status)   cmd_status "$@" ;;

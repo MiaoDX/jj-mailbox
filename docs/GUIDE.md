@@ -60,6 +60,14 @@ JJ_MAILBOX_AGENT=bob jj-mailbox read
 JJ_MAILBOX_AGENT=bob jj-mailbox send alice "Review done" "LGTM, two minor comments attached."
 ```
 
+To inspect a full conversation thread, point the CLI at any message ID in the chain:
+
+```bash
+jj-mailbox thread msg-a1b2c3
+# Turn 1  alice → bob  "Need review"
+#   Turn 2  bob → alice  "Review done"  [refs: msg-a1b2c3]
+```
+
 ## Check Agent Status
 
 ```bash
