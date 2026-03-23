@@ -94,40 +94,6 @@ jj-mailbox status
 
 Or check `agents/` directory — each subdirectory is an agent with `profile.json` and `status.json`.
 
-## Updating Your Status
-
-```bash
-jj-mailbox set-status idle
-jj-mailbox set-status busy --task task-a1b2c3
-```
-
-Valid statuses: `online`, `busy`, `idle`, `offline`, `waiting_approval`.
-
-## Task Management
-
-Create, claim, and complete tasks with dependency tracking:
-
-```bash
-jj-mailbox task create "Implement feature" --priority 1
-jj-mailbox task create "Write tests" --priority 2 --blocked-by task-a1b2c3
-jj-mailbox task claim                    # Auto-claim highest-priority ready task
-jj-mailbox task complete task-a1b2c3     # Mark completed
-jj-mailbox task complete task-a1b2c3 --hook "make test"  # With quality gate
-jj-mailbox task list                     # Show all tasks
-jj-mailbox task list pending             # Filter by status
-```
-
-## Lifecycle Messages
-
-Send lifecycle signals using the `--type` flag:
-
-```bash
-jj-mailbox send lead "Ready" "Task done, awaiting instructions." --type idle
-jj-mailbox send lead "Review needed" "Design doc at shared/artifacts/design.md" --type approval_request
-jj-mailbox send worker "Approved" "Looks good, proceed." --type approval_response
-jj-mailbox send worker "Wind down" "Please finish current task and stop." --type shutdown
-```
-
 ## Shared Space
 
 Write to `shared/` for content all agents can access:

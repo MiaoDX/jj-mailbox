@@ -23,26 +23,20 @@ usage() {
 jj-mailbox v${VERSION} — file-based message passing for AI agents
 
 Usage:
-  jj-mailbox init <repo-path> [--remote <git-url>]         Initialize a mailbox repo
-  jj-mailbox register <name> [--desc <description>]         Register an agent
-  jj-mailbox send <to> <subject> <body> [flags]             Send a message
-      --refs <id1,id2,...>   Reference previous message IDs
-      --type <type>          Message type (default: message)
-          Types: message, task, reply, broadcast,
-                 idle, approval_request, approval_response, shutdown
-  jj-mailbox inbox [--agent <name>]                         Check inbox
-  jj-mailbox thread <msg-id>                                Show a conversation thread
-  jj-mailbox read [<agent>]                                 Read & process oldest message
-  jj-mailbox set-status <status> [--task <task-id>]         Update agent status
-      Statuses: online, busy, idle, offline, waiting_approval
-  jj-mailbox task create <subject> [--priority <n>] [--blocked-by <ids>]
-  jj-mailbox task claim                                     Claim highest-priority ready task
-  jj-mailbox task complete <task-id> [--hook <command>]     Complete a task (with optional quality gate)
-  jj-mailbox task list [<status>|all]                       List tasks (default: all)
-  jj-mailbox sync [--interval <seconds>]                    Run sync loop
-  jj-mailbox watch [--agent <name>] [--exec <command>]      Watch inbox for new local messages
-  jj-mailbox status                                         Show all agents' status
-  jj-mailbox help                                           Show this help
+  jj-mailbox init <repo-path> [--remote <git-url>]    Initialize a mailbox repo
+  jj-mailbox register <name> [--desc <description>]    Register an agent
+  jj-mailbox send <to> <subject> <body> [--refs <ids>] [--type <type>]
+                                                       Send a message
+  jj-mailbox inbox [--agent <name>]                    Check inbox
+  jj-mailbox thread <msg-id>                           Show a conversation thread
+  jj-mailbox read [<agent>]                            Read & process oldest message
+  jj-mailbox sync [--interval <seconds>]               Run sync loop
+  jj-mailbox watch [--agent <name>] [--exec <command>] Watch inbox for new local messages
+  jj-mailbox status                                    Show all agents' status
+  jj-mailbox help                                      Show this help
+
+Message types: message (default), task, reply, broadcast,
+               idle, approval_request, approval_response, shutdown
 
 Environment:
   JJ_MAILBOX_REPO     Path to mailbox repo (default: current directory)
@@ -626,358 +620,11 @@ print(s.get('status','?'), s.get('last_seen','?'))
     local status_icon="⚪"
     [[ "${status}" == "online" ]] && status_icon="🟢"
     [[ "${status}" == "busy" ]] && status_icon="🟡"
-    [[ "${status}" == "idle" ]] && status_icon="🔵"
-    [[ "${status}" == "waiting_approval" ]] && status_icon="🟠"
     [[ "${status}" == "offline" ]] && status_icon="🔴"
 
     echo -e "  ${status_icon} ${name}  (${status})  📬 ${inbox_count} msg  🕐 ${last_seen}"
   done
   echo ""
-}
-
-cmd_set_status() {
-  ensure_repo
-  ensure_jj
-  local new_status="${1:?Usage: jj-mailbox set-status <status> [--task <task-id>]}"
-  local task_id=""
-  local agent
-  agent="$(get_agent)"
-  local repo
-  repo="$(get_repo)"
-
-  # Validate status
-  case "${new_status}" in
-    online|busy|idle|offline|waiting_approval) ;;
-    *)
-      err "Unknown status: ${new_status}"
-      err "Valid statuses: online, busy, idle, offline, waiting_approval"
-      exit 1
-      ;;
-  esac
-
-  # Parse optional --task flag
-  shift
-  while [[ $# -gt 0 ]]; do
-    case "$1" in
-      --task) task_id="${2:-}"; shift 2 ;;
-      *) shift ;;
-    esac
-  done
-
-  cd "${repo}"
-
-  local status_file="agents/${agent}/status.json"
-  if [[ ! -f "${status_file}" ]]; then
-    err "Agent not registered: ${agent}"
-    exit 1
-  fi
-
-  # Update status.json via python3 for safe JSON manipulation
-  python3 -c "
-import json,sys
-path, new_status, ts, task_id = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
-with open(path, 'r+') as f:
-    s = json.load(f)
-    s['status'] = new_status
-    s['last_seen'] = ts
-    s['current_task'] = task_id if task_id else None
-    f.seek(0); json.dump(s, f, indent=2); f.truncate()
-" "${status_file}" "${new_status}" "$(ts_iso)" "${task_id}"
-
-  jj commit -m "${agent}: status → ${new_status}"
-
-  ok "Status updated: ${agent} → ${new_status}"
-  if [[ -n "${task_id}" ]]; then
-    log "  Task: ${task_id}"
-  fi
-}
-
-cmd_task() {
-  local subcmd="${1:?Usage: jj-mailbox task <create|claim|complete|list> [args...]}"
-  shift
-  case "${subcmd}" in
-    create)   cmd_task_create "$@" ;;
-    claim)    cmd_task_claim "$@" ;;
-    complete) cmd_task_complete "$@" ;;
-    list)     cmd_task_list "$@" ;;
-    *)
-      err "Unknown task subcommand: ${subcmd}"
-      err "Valid subcommands: create, claim, complete, list"
-      exit 1
-      ;;
-  esac
-}
-
-cmd_task_create() {
-  ensure_repo
-  ensure_jj
-  local subject="${1:?Usage: jj-mailbox task create <subject> [--priority <n>] [--blocked-by <id1,id2,...>]}"
-  local priority=0
-  local blocked_by_arg=""
-  local agent
-  agent="$(get_agent)"
-  local repo
-  repo="$(get_repo)"
-
-  shift
-  while [[ $# -gt 0 ]]; do
-    case "$1" in
-      --priority) priority="${2:-0}"; shift 2 ;;
-      --blocked-by) blocked_by_arg="${2:-}"; shift 2 ;;
-      *) shift ;;
-    esac
-  done
-
-  cd "${repo}"
-  mkdir -p shared/tasks
-
-  local task_id="task-$(gen_id)"
-
-  # Build blockedBy JSON array
-  local blocked_json="[]"
-  if [[ -n "${blocked_by_arg}" ]]; then
-    local _arr _item _first=true
-    blocked_json="["
-    IFS=',' read -ra _arr <<< "${blocked_by_arg}"
-    for _item in "${_arr[@]}"; do
-      _item="${_item// /}"
-      [[ -z "${_item}" ]] && continue
-      ${_first} || blocked_json+=","
-      blocked_json+="\"${_item}\""
-      _first=false
-    done
-    blocked_json+="]"
-  fi
-
-  cat > "shared/tasks/${task_id}.json" <<EOF
-{
-  "version": "0.1",
-  "id": "${task_id}",
-  "subject": "${subject}",
-  "status": "pending",
-  "assignee": null,
-  "created_by": "${agent}",
-  "created_at": "$(ts_iso)",
-  "priority": ${priority},
-  "blocks": [],
-  "blockedBy": ${blocked_json},
-  "metadata": {}
-}
-EOF
-
-  jj commit -m "task: create ${task_id} — ${subject}"
-
-  ok "Task created: ${task_id}"
-  log "  Subject: ${subject}"
-  log "  Priority: ${priority}"
-  if [[ -n "${blocked_by_arg}" ]]; then
-    log "  Blocked by: ${blocked_by_arg}"
-  fi
-  echo "${task_id}"
-}
-
-cmd_task_claim() {
-  ensure_repo
-  ensure_jj
-  local agent
-  agent="$(get_agent)"
-  local repo
-  repo="$(get_repo)"
-  cd "${repo}"
-
-  # Find the highest-priority ready task using python3
-  local claimed_id
-  claimed_id=$(python3 - "${agent}" <<'PY'
-import json, os, sys, glob
-
-agent = sys.argv[1]
-tasks_dir = "shared/tasks"
-if not os.path.isdir(tasks_dir):
-    sys.exit(1)
-
-# Load all tasks
-tasks = {}
-for path in glob.glob(os.path.join(tasks_dir, "task-*.json")):
-    try:
-        with open(path) as f:
-            t = json.load(f)
-        tasks[t["id"]] = t
-        t["_path"] = path
-    except (OSError, json.JSONDecodeError, KeyError):
-        continue
-
-# Find completed task IDs
-completed = {tid for tid, t in tasks.items() if t.get("status") == "completed"}
-
-# Find claimable: pending + all blockedBy completed
-candidates = []
-for t in tasks.values():
-    if t.get("status") != "pending":
-        continue
-    blocked_by = t.get("blockedBy", [])
-    if all(dep in completed for dep in blocked_by):
-        candidates.append(t)
-
-if not candidates:
-    sys.exit(1)
-
-# Sort by priority (lowest number = highest priority), then by created_at
-candidates.sort(key=lambda t: (t.get("priority", 0), t.get("created_at", "")))
-best = candidates[0]
-
-# Claim it
-best["status"] = "in_progress"
-best["assignee"] = agent
-with open(best["_path"], "w") as f:
-    del best["_path"]
-    json.dump(best, f, indent=2)
-
-print(best["id"])
-PY
-  ) || true
-
-  if [[ -z "${claimed_id}" ]]; then
-    log "No claimable tasks found."
-    return 1
-  fi
-
-  jj commit -m "${agent}: claim ${claimed_id}"
-
-  ok "Claimed task: ${claimed_id}"
-  echo "${claimed_id}"
-}
-
-cmd_task_complete() {
-  ensure_repo
-  ensure_jj
-  local task_id="${1:?Usage: jj-mailbox task complete <task-id> [--hook <command>]}"
-  local hook_cmd=""
-  local agent
-  agent="$(get_agent)"
-  local repo
-  repo="$(get_repo)"
-
-  shift
-  while [[ $# -gt 0 ]]; do
-    case "$1" in
-      --hook) hook_cmd="${2:-}"; shift 2 ;;
-      *) shift ;;
-    esac
-  done
-
-  cd "${repo}"
-
-  local task_file="shared/tasks/${task_id}.json"
-  if [[ ! -f "${task_file}" ]]; then
-    err "Task not found: ${task_id}"
-    exit 1
-  fi
-
-  # Run hook if provided
-  if [[ -n "${hook_cmd}" ]]; then
-    log "Running quality gate: ${hook_cmd}"
-    local hook_stderr hook_rc
-    hook_stderr=$(bash -c "${hook_cmd}" 2>&1 1>/dev/null) && hook_rc=0 || hook_rc=$?
-
-    if [[ "${hook_rc}" -eq 2 ]]; then
-      warn "Quality gate rejected completion for ${task_id}"
-      # Send feedback message to the agent
-      local feedback_body="${hook_stderr:-Quality gate failed with no output.}"
-      # Auto-send a system feedback message to the agent's inbox
-      if [[ -d "inbox/${agent}/new" ]]; then
-        local fb_id="msg-$(gen_id)"
-        local fb_ts
-        fb_ts="$(ts_filename)"
-        local fb_file="${fb_ts}_system_${fb_id}.json"
-        cat > "inbox/${agent}/new/${fb_file}" <<EOF
-{
-  "version": "0.1",
-  "id": "${fb_id}",
-  "timestamp": "$(ts_iso)",
-  "from": "system",
-  "to": "${agent}",
-  "type": "reply",
-  "subject": "Task ${task_id} completion rejected",
-  "body": $(python3 -c "import json,sys; print(json.dumps(sys.argv[1]))" "${feedback_body}"),
-  "refs": ["${task_id}"],
-  "metadata": {}
-}
-EOF
-        jj commit -m "system: quality gate rejected ${task_id}"
-      fi
-      err "Hook exited with code 2 — task stays in_progress. Feedback sent."
-      return 2
-    elif [[ "${hook_rc}" -ne 0 ]]; then
-      err "Hook failed with exit code ${hook_rc} — task unchanged."
-      return 1
-    fi
-    ok "Quality gate passed."
-  fi
-
-  # Mark task as completed
-  python3 -c "
-import json,sys
-path, ts = sys.argv[1], sys.argv[2]
-with open(path, 'r+') as f:
-    t = json.load(f)
-    t['status'] = 'completed'
-    f.seek(0); json.dump(t, f, indent=2); f.truncate()
-" "${task_file}" "$(ts_iso)"
-
-  jj commit -m "${agent}: complete ${task_id}"
-
-  ok "Task completed: ${task_id}"
-}
-
-cmd_task_list() {
-  ensure_repo
-  local status_filter="${1:-all}"
-  local repo
-  repo="$(get_repo)"
-  cd "${repo}"
-
-  python3 - "${status_filter}" <<'PY'
-import json, os, sys, glob
-
-status_filter = sys.argv[1]
-tasks_dir = "shared/tasks"
-if not os.path.isdir(tasks_dir):
-    print("No tasks found.")
-    sys.exit(0)
-
-tasks = []
-for path in sorted(glob.glob(os.path.join(tasks_dir, "task-*.json"))):
-    try:
-        with open(path) as f:
-            t = json.load(f)
-        tasks.append(t)
-    except (OSError, json.JSONDecodeError):
-        continue
-
-if not tasks:
-    print("No tasks found.")
-    sys.exit(0)
-
-# Filter
-if status_filter != "all":
-    tasks = [t for t in tasks if t.get("status") == status_filter]
-
-if not tasks:
-    print(f"No tasks with status '{status_filter}'.")
-    sys.exit(0)
-
-# Sort by priority then created_at
-tasks.sort(key=lambda t: (t.get("priority", 0), t.get("created_at", "")))
-
-icons = {"pending": "⏳", "in_progress": "🔨", "completed": "✅", "blocked": "🚫"}
-for t in tasks:
-    icon = icons.get(t.get("status", ""), "❓")
-    assignee = t.get("assignee") or "unassigned"
-    blocked = t.get("blockedBy", [])
-    blocked_str = f"  [blocked by: {', '.join(blocked)}]" if blocked else ""
-    print(f"  {icon} {t['id']}  P{t.get('priority',0)}  ({t.get('status','?')})  {assignee}  \"{t.get('subject','?')}\"{blocked_str}")
-
-PY
 }
 
 # --- Main ---
@@ -987,19 +634,17 @@ main() {
   shift || true
 
   case "${cmd}" in
-    init)       cmd_init "$@" ;;
-    register)   cmd_register "$@" ;;
-    send)       cmd_send "$@" ;;
-    inbox)      cmd_inbox "$@" ;;
-    thread)     cmd_thread "$@" ;;
-    read)       cmd_read_and_process "$@" ;;
-    sync)       cmd_sync "$@" ;;
-    watch)      cmd_watch "$@" ;;
-    status)     cmd_status "$@" ;;
-    set-status) cmd_set_status "$@" ;;
-    task)       cmd_task "$@" ;;
-    version)    echo "jj-mailbox v${VERSION}" ;;
-    help|*)     usage ;;
+    init)     cmd_init "$@" ;;
+    register) cmd_register "$@" ;;
+    send)     cmd_send "$@" ;;
+    inbox)    cmd_inbox "$@" ;;
+    thread)   cmd_thread "$@" ;;
+    read)     cmd_read_and_process "$@" ;;
+    sync)     cmd_sync "$@" ;;
+    watch)    cmd_watch "$@" ;;
+    status)   cmd_status "$@" ;;
+    version)  echo "jj-mailbox v${VERSION}" ;;
+    help|*)   usage ;;
   esac
 }
 
