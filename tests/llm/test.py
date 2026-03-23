@@ -108,14 +108,19 @@ def run_agent(agent_name, system_prompt, user_prompt, repo, client, log):
             return final_text
 
         # Execute tool calls
-        messages.append({"role": "assistant", "content": msg.content, "tool_calls": [
+        assistant_msg = {"role": "assistant", "content": msg.content, "tool_calls": [
             {
                 "id": tc.id,
                 "type": "function",
                 "function": {"name": tc.function.name, "arguments": tc.function.arguments},
             }
             for tc in msg.tool_calls
-        ]})
+        ]}
+        # Thinking models (Kimi, DeepSeek) return reasoning_content that must be echoed back
+        reasoning = getattr(msg, "reasoning_content", None)
+        if reasoning:
+            assistant_msg["reasoning_content"] = reasoning
+        messages.append(assistant_msg)
 
         for tc in msg.tool_calls:
             try:
