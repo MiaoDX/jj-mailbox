@@ -41,7 +41,7 @@ from examples.adapters.openai.tools import OPENAI_TOOLS, JjMailboxOpenAITools
 LLM_API_KEY = os.environ.get("LLM_API_KEY", "")
 LLM_SDK = os.environ.get("LLM_SDK", "openai").strip().lower() or "openai"
 LLM_API_BASE = os.environ.get("LLM_API_BASE", "https://openrouter.ai/api/v1")
-ANTHROPIC_BASE_URL = os.environ.get("ANTHROPIC_BASE_URL", LLM_API_BASE)
+ANTHROPIC_BASE_URL = os.environ.get("ANTHROPIC_BASE_URL", "https://api.anthropic.com")
 LLM_MODEL = os.environ.get("LLM_MODEL", "nvidia/nemotron-3-super-120b-a12b:free")
 
 MAX_TURNS = 6  # max tool-calling turns per agent per round
@@ -89,6 +89,9 @@ class AgentBackend:
         raise NotImplementedError
 
     def run_turn(self, system_prompt: str, messages: list[dict[str, Any]], agent_name: str) -> AgentTurn:
+        raise NotImplementedError
+
+    def format_tool_result(self, tool_call_id: str, result_content: str) -> dict[str, Any]:
         raise NotImplementedError
 
     def append_tool_results(
@@ -204,6 +207,13 @@ class OpenAIBackend(AgentBackend):
 
         return AgentTurn(final_text="", tool_calls=tool_calls, assistant_message=assistant_message)
 
+    def format_tool_result(self, tool_call_id: str, result_content: str) -> dict[str, Any]:
+        return {
+            "role": "tool",
+            "tool_call_id": tool_call_id,
+            "content": result_content,
+        }
+
     def append_tool_results(
         self,
         messages: list[dict[str, Any]],
@@ -275,6 +285,13 @@ class AnthropicBackend(AgentBackend):
                         "input": block.input if isinstance(block.input, dict) else {},
                     }
                 )
+            elif block_type in ("thinking", "reasoning"):
+                # Thinking/reasoning blocks from Anthropic thinking models or
+                # Kimi via Anthropic format — skip gracefully.
+                pass
+            else:
+                # Unknown block type — ignore gracefully to be forward-compatible.
+                pass
 
         if not tool_calls:
             return AgentTurn(final_text="\n".join(part for part in text_parts if part).strip(), tool_calls=[], assistant_message=None)
@@ -284,6 +301,13 @@ class AnthropicBackend(AgentBackend):
             tool_calls=tool_calls,
             assistant_message={"role": "assistant", "content": assistant_content},
         )
+
+    def format_tool_result(self, tool_call_id: str, result_content: str) -> dict[str, Any]:
+        return {
+            "type": "tool_result",
+            "tool_use_id": tool_call_id,
+            "content": result_content,
+        }
 
     def append_tool_results(
         self,
@@ -339,22 +363,7 @@ def run_agent(agent_name, system_prompt, user_prompt, repo, backend: AgentBacken
             print(f"  [{agent_name}] tool: {tc.name}({tc.args}) → {result[:80]}")
             log.append({"agent": agent_name, "type": "tool_call", "tool": tc.name, "args": tc.args, "result": result})
 
-            if backend.name == "openai":
-                tool_results.append(
-                    {
-                        "role": "tool",
-                        "tool_call_id": tc.id,
-                        "content": result,
-                    }
-                )
-            else:
-                tool_results.append(
-                    {
-                        "type": "tool_result",
-                        "tool_use_id": tc.id,
-                        "content": result,
-                    }
-                )
+            tool_results.append(backend.format_tool_result(tc.id, result))
 
         backend.append_tool_results(messages, turn.assistant_message, tool_results)
 
