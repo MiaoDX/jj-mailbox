@@ -78,6 +78,7 @@ def main():
     run_test("scripted/test.py", [sys.executable, str(ROOT / "tests/scripted/test.py")])
     run_test("adapters/test.py", [sys.executable, str(ROOT / "tests/adapters/test.py")])
     run_test("mcp/test.py", [sys.executable, str(ROOT / "tests/mcp/test.py")])
+    run_test("watch_test.py", [sys.executable, str(ROOT / "tests/watch_test.py")])
 
     # -- Comparison benchmark --
     print("\n=== Comparison Benchmark ===")

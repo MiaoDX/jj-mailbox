@@ -66,6 +66,7 @@ Same exchange as structured JSON, Git-tracked, persistent — queryable forever.
 - **Sending** = write a JSON file to `inbox/{recipient}/new/`
 - **Receiving** = read files from `inbox/{self}/new/`
 - **Syncing** = `jj git fetch` + `jj git push` (automated by sync daemon)
+- **Watching** = instant local inbox notification via `jj-mailbox watch`
 - **Conflicts** = jj handles them as first-class objects — both messages are preserved, never lost
 
 ## Quick Start
@@ -88,9 +89,12 @@ jj git push --all
 jj-mailbox send bob "Need review" "Please review the design doc."
 jj-mailbox inbox
 jj-mailbox read
+
+# Optional: instant local inbox notifications
+JJ_MAILBOX_AGENT=bob jj-mailbox watch --exec "jj-mailbox read"
 ```
 
-For cross-machine setup, sync daemon, and OpenClaw integration, see the [Full Guide](docs/GUIDE.md).
+For cross-machine setup, sync daemon, watch mode, and OpenClaw integration, see the [Full Guide](docs/GUIDE.md).
 
 ## Demo
 
