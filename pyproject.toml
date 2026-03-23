@@ -10,7 +10,7 @@ requires-python = ">=3.10"
 default-groups = ["test"]
 
 [dependency-groups]
-test-llm = ["openai"]
+test-llm = ["openai", "anthropic"]
 test-smolagents = ["smolagents[openai]>=1.0.0"]
 test = [{include-group = "test-llm"}, {include-group = "test-smolagents"}]
 media = ["moviepy"]
