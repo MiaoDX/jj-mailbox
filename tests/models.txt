@@ -1,5 +1,4 @@
 # Free models tested in CI (one per line, OpenRouter model IDs)
 # Add/remove models here — CI matrix reads this file.
 # Browse: https://openrouter.ai/collections/free-models
-openrouter/hunter-alpha
 nvidia/nemotron-3-super-120b-a12b:free
