@@ -18,7 +18,7 @@ mailbox-repo/
 ├── agents/
 │   ├── alice/
 │   │   ├── profile.json          # agent identity & capabilities
-│   │   └── status.json           # current status (online/busy/offline)
+│   │   └── status.json           # current status (online/busy/idle/offline/...)
 │   └── bob/
 │       ├── profile.json
 │       └── status.json
@@ -33,6 +33,8 @@ mailbox-repo/
 │   ├── tasks/                    # shared task board
 │   ├── knowledge/                # shared knowledge base
 │   └── artifacts/                # shared outputs
+├── config/
+│   └── hooks.yaml                # optional task completion hooks
 └── AGENTS.md                     # human-readable agent registry
 ```
 
@@ -81,7 +83,7 @@ Fields:
 | `timestamp` | yes | UTC ISO 8601 |
 | `from` | yes | Sender agent name |
 | `to` | yes | Recipient agent name |
-| `type` | yes | `message`, `task`, `reply`, `broadcast` |
+| `type` | yes | `message`, `task`, `reply`, `broadcast`, `idle`, `approval_request`, `approval_response`, `shutdown` |
 | `subject` | no | Short summary |
 | `body` | yes | Message content (plain text or markdown) |
 | `refs` | no | Array of referenced message IDs (for threading) |
@@ -93,6 +95,10 @@ Fields:
 - **`task`** — request for the recipient to do something
 - **`reply`** — response to a previous message (use `refs` to link)
 - **`broadcast`** — informational, no response expected
+- **`idle`** — agent reports completion and availability for new work
+- **`approval_request`** — agent requests review or approval before continuing
+- **`approval_response`** — reviewer approves/rejects with feedback
+- **`shutdown`** — lead requests graceful shutdown
 
 ## Agent Profile
 
@@ -116,11 +122,36 @@ Fields:
 {
   "status": "online",
   "last_seen": "2026-03-11T14:30:00Z",
-  "current_task": "Researching topic X"
+  "current_task": "Researching topic X",
+  "completed_tasks": ["task-001"],
+  "available_since": null,
+  "capabilities": ["web-search"]
 }
 ```
 
-Status values: `online`, `busy`, `offline`
+Status values: `online`, `busy`, `idle`, `offline`, `waiting_approval`
+
+## Shared Task Schema
+
+Tasks live in `shared/tasks/*.json`:
+
+```json
+{
+  "id": "task-001",
+  "subject": "Implement Slack adapter",
+  "activeForm": "Implement Slack adapter",
+  "status": "pending",
+  "assignee": null,
+  "created_by": "lead",
+  "created_at": "2026-03-13T10:00:00Z",
+  "priority": 1,
+  "blocks": [],
+  "blockedBy": [],
+  "metadata": {}
+}
+```
+
+Task states: `pending`, `in_progress`, `completed`. A task is considered blocked when any `blockedBy` dependency is not yet `completed`.
 
 ## Operations
 
@@ -140,6 +171,21 @@ Status values: `online`, `busy`, `offline`
 
 Write the same message to multiple `inbox/{recipient}/new/` directories.
 Or write to `shared/tasks/` for all agents to see.
+
+### Task Board Operations
+
+- `jj-mailbox task create` — create a shared task JSON file
+- `jj-mailbox task claim` — claim the highest-priority ready task
+- `jj-mailbox task complete` — mark the task complete after optional hooks pass
+- `jj-mailbox task list` — print the current task board
+
+## Hooks
+
+`config/hooks.yaml` may define `on_task_complete` commands. Hook semantics:
+
+- exit `0` → allow completion
+- exit `2` → reject completion and send stderr back to the assignee as a mailbox reply
+- any other non-zero exit → treat as a CLI error
 
 ## Sync Protocol
 

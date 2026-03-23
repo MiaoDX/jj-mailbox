@@ -90,6 +90,11 @@ jj-mailbox send bob "Need review" "Please review the design doc."
 jj-mailbox inbox
 jj-mailbox read
 
+# Shared task board
+jj-mailbox task create "Implement review flow" --priority 1
+jj-mailbox task claim
+jj-mailbox task list
+
 # Optional: instant local inbox notifications
 JJ_MAILBOX_AGENT=bob jj-mailbox watch --exec "jj-mailbox read"
 ```
@@ -119,7 +124,8 @@ mailbox-repo/
 ├── agents/{name}/profile.json    # who is this agent?
 ├── inbox/{name}/new/*.json       # unread messages
 ├── inbox/{name}/processed/       # read messages
-└── shared/                       # shared workspace
+├── shared/                       # shared workspace
+└── config/hooks.yaml             # optional quality gates for task completion
 ```
 
 ## Testing

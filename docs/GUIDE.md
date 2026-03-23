@@ -71,6 +71,12 @@ JJ_MAILBOX_AGENT=bob jj-mailbox read
 JJ_MAILBOX_AGENT=bob jj-mailbox send alice "Review done" "LGTM, two minor comments attached."
 ```
 
+You can also send lifecycle-aware message types when coordinating larger workflows:
+
+```bash
+JJ_MAILBOX_AGENT=bob jj-mailbox send alice "Need approval" "Please confirm rollout." --type approval_request
+```
+
 To inspect a full conversation thread, point the CLI at any message ID in the chain:
 
 ```bash
@@ -86,6 +92,40 @@ jj-mailbox status
 ```
 
 This shows all registered agents with their online/offline status and last seen time.
+
+## Shared Task Board
+
+`jj-mailbox` now includes a lightweight task board in `shared/tasks/`:
+
+```bash
+# Lead creates tasks
+JJ_MAILBOX_AGENT=lead jj-mailbox task create "Implement adapter" --priority 1
+JJ_MAILBOX_AGENT=lead jj-mailbox task create "Run integration tests" --priority 2 --blocked-by task-001
+
+# Worker claims the highest-priority ready task
+JJ_MAILBOX_AGENT=alice jj-mailbox task claim
+
+# Inspect task board
+jj-mailbox task list
+```
+
+When a worker completes a task, the CLI updates that agent's status to `idle` and records the completed task in `agents/{name}/status.json`.
+
+## Task Completion Hooks
+
+Each mailbox repo is initialized with `config/hooks.yaml`. Add `on_task_complete` hooks to enforce quality gates:
+
+```yaml
+on_task_complete:
+  - name: run-tests
+    command: "cd ${TASK_WORKSPACE} && make test"
+```
+
+Hook exit codes:
+
+- `0` — completion succeeds
+- `2` — completion is rejected and stderr is delivered back to the assignee as a mailbox reply
+- anything else — the CLI exits with an error
 
 ## OpenClaw Integration
 

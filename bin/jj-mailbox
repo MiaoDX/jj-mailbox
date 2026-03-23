@@ -25,9 +25,13 @@ jj-mailbox v${VERSION} — file-based message passing for AI agents
 Usage:
   jj-mailbox init <repo-path> [--remote <git-url>]    Initialize a mailbox repo
   jj-mailbox register <name> [--desc <description>]    Register an agent
-  jj-mailbox send <to> <subject> <body> [--refs <ids>]  Send a message (--refs: comma-separated message ids)
+  jj-mailbox send <to> <subject> <body> [--refs <ids>] [--type <kind>]  Send a message (--refs: comma-separated ids)
   jj-mailbox inbox [--agent <name>]                    Check inbox
   jj-mailbox thread <msg-id>                           Show a conversation thread
+  jj-mailbox task create <subject> [options]           Create a shared task
+  jj-mailbox task claim                                Claim highest priority ready task
+  jj-mailbox task complete <task-id>                   Complete a task (runs hooks if configured)
+  jj-mailbox task list                                 Show shared task board
   jj-mailbox sync [--interval <seconds>]               Run sync loop
   jj-mailbox watch [--agent <name>] [--exec <command>] Watch inbox for new local messages
   jj-mailbox status                                    Show all agents' status
@@ -87,6 +91,52 @@ ts_iso() {
   date -u +"%Y-%m-%dT%H:%M:%SZ"
 }
 
+python_json_update() {
+  local path="${1:?}"
+  local py_script="${2:?}"
+  shift 2 || true
+  python3 - "$path" "$@" <<PY
+import json
+import sys
+
+path = sys.argv[1]
+with open(path) as f:
+    payload = json.load(f)
+
+${py_script}
+
+with open(path, "w") as f:
+    json.dump(payload, f, indent=2)
+    f.write("\\n")
+PY
+}
+
+update_agent_status() {
+  local agent="${1:?}"
+  local status="${2:?}"
+  local current_task="${3:-__KEEP__}"
+  local completed_task="${4:-}"
+  local repo
+  repo="$(get_repo)"
+  local path="${repo}/agents/${agent}/status.json"
+  [[ -f "${path}" ]] || return 0
+
+  python_json_update "${path}" '
+payload["status"] = sys.argv[2]
+payload["last_seen"] = sys.argv[3]
+current_task = sys.argv[4]
+completed_task = sys.argv[5]
+if current_task != "__KEEP__":
+    payload["current_task"] = None if current_task == "__NULL__" else current_task
+if completed_task:
+    completed = payload.setdefault("completed_tasks", [])
+    if completed_task not in completed:
+        completed.append(completed_task)
+if payload.get("status") == "idle":
+    payload["available_since"] = sys.argv[3]
+' "${status}" "$(ts_iso)" "${current_task}" "${completed_task}" 2>/dev/null || true
+}
+
 # --- Commands ---
 
 run_exec_hook() {
@@ -140,7 +190,7 @@ cmd_init() {
   fi
 
   # Create directory structure
-  mkdir -p agents inbox shared/{tasks,knowledge,artifacts}
+  mkdir -p agents inbox shared/{tasks,knowledge,artifacts} config
 
   # Create AGENTS.md
   cat > AGENTS.md <<'AGENTS'
@@ -162,6 +212,12 @@ Thumbs.db
 *.tmp
 *.swp
 GI
+
+  cat > config/hooks.yaml <<'HOOKS'
+# Hooks run during `jj-mailbox task complete`.
+# exit 0 = pass, exit 2 = reject completion and send stderr feedback to the assignee.
+on_task_complete: []
+HOOKS
 
   jj commit -m "Initialize jj-mailbox repo"
 
@@ -199,7 +255,10 @@ EOF
 {
   "status": "online",
   "last_seen": "$(ts_iso)",
-  "current_task": null
+  "current_task": null,
+  "completed_tasks": [],
+  "available_since": null,
+  "capabilities": []
 }
 EOF
 
@@ -220,6 +279,7 @@ cmd_send() {
   local subject="${2:?}"
   local body="${3:?}"
   local refs_arg=""
+  local msg_type="message"
   local from
   from="$(get_agent)"
   local repo
@@ -230,6 +290,7 @@ cmd_send() {
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --refs) refs_arg="${2:-}"; shift 2 ;;
+      --type) msg_type="${2:-message}"; shift 2 ;;
       *) shift ;;
     esac
   done
@@ -265,6 +326,14 @@ cmd_send() {
     refs_json+="]"
   fi
 
+  case "${msg_type}" in
+    message|task|reply|broadcast|idle|approval_request|approval_response|shutdown) ;;
+    *)
+      err "Unsupported message type: ${msg_type}"
+      exit 1
+      ;;
+  esac
+
   cat > "inbox/${to}/new/${filename}" <<EOF
 {
   "version": "0.1",
@@ -272,7 +341,7 @@ cmd_send() {
   "timestamp": "$(ts_iso)",
   "from": "${from}",
   "to": "${to}",
-  "type": "message",
+  "type": "${msg_type}",
   "subject": "${subject}",
   "body": "${body}",
   "refs": ${refs_json},
@@ -287,6 +356,347 @@ EOF
   log "  File: inbox/${to}/new/${filename}"
   log "  ID: ${msg_id}"
   echo "${msg_id}"
+}
+
+next_task_id() {
+  local repo
+  repo="$(get_repo)"
+  python3 - "${repo}/shared/tasks" <<'PY'
+import json
+import os
+import re
+import sys
+
+task_dir = sys.argv[1]
+max_id = 0
+if os.path.isdir(task_dir):
+    for name in os.listdir(task_dir):
+        if not name.endswith(".json"):
+            continue
+        match = re.fullmatch(r"task-(\d+)\.json", name)
+        if match:
+            max_id = max(max_id, int(match.group(1)))
+print(f"task-{max_id + 1:03d}")
+PY
+}
+
+task_path() {
+  local task_id="${1:?}"
+  echo "$(get_repo)/shared/tasks/${task_id}.json"
+}
+
+task_send_hook_feedback() {
+  local assignee="${1:?}"
+  local task_id="${2:?}"
+  local hook_name="${3:?}"
+  local stderr_file="${4:?}"
+  local repo
+  repo="$(get_repo)"
+  local msg_id="msg-$(gen_id)"
+  local filename
+  filename="$(ts_filename)_system_${msg_id}.json"
+  local body
+  body="$(python3 - "$stderr_file" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1]) as f:
+    text = f.read().strip()
+print(json.dumps(text or "Hook rejected completion without stderr output."))
+PY
+)"
+
+  cat > "${repo}/inbox/${assignee}/new/${filename}" <<EOF
+{
+  "version": "0.1",
+  "id": "${msg_id}",
+  "timestamp": "$(ts_iso)",
+  "from": "system",
+  "to": "${assignee}",
+  "type": "reply",
+  "subject": "Task ${task_id} completion rejected: ${hook_name}",
+  "body": ${body},
+  "refs": ["${task_id}"],
+  "metadata": {
+    "hook": "${hook_name}",
+    "task_id": "${task_id}"
+  }
+}
+EOF
+}
+
+run_task_complete_hooks() {
+  local task_id="${1:?}"
+  local assignee="${2:-}"
+  local repo
+  repo="$(get_repo)"
+  local config="${repo}/config/hooks.yaml"
+  [[ -f "${config}" ]] || return 0
+
+  local hooks_json
+  hooks_json="$(python3 - "${config}" <<'PY'
+import json
+import sys
+
+path = sys.argv[1]
+hooks = []
+in_section = False
+current = None
+
+with open(path) as f:
+    for raw in f:
+        line = raw.rstrip("\n")
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        if not line.startswith(" ") and stripped.startswith("on_task_complete:"):
+            in_section = True
+            continue
+        if not in_section:
+            continue
+        if not line.startswith("  "):
+            break
+        if stripped.startswith("- "):
+            if current:
+                hooks.append(current)
+            current = {}
+            stripped = stripped[2:].strip()
+            if stripped.startswith("name:"):
+                current["name"] = stripped.split(":", 1)[1].strip().strip("\"'")
+        elif ":" in stripped and current is not None:
+            key, value = stripped.split(":", 1)
+            current[key.strip()] = value.strip().strip("\"'")
+if current:
+    hooks.append(current)
+
+print(json.dumps(hooks))
+PY
+)"
+
+  local hook_count
+  hook_count="$(python3 -c 'import json,sys; print(len(json.loads(sys.argv[1])))' "${hooks_json}")"
+  [[ "${hook_count}" -eq 0 ]] && return 0
+
+  while IFS=$'\t' read -r hook_name hook_cmd; do
+    [[ -n "${hook_cmd}" ]] || continue
+    local stdout_file stderr_file
+    stdout_file="$(mktemp)"
+    stderr_file="$(mktemp)"
+    local exit_code=0
+    if TASK_ID="${task_id}" TASK_WORKSPACE="${repo}" TASK_ASSIGNEE="${assignee}" bash -c "${hook_cmd}" >"${stdout_file}" 2>"${stderr_file}"; then
+      rm -f "${stdout_file}" "${stderr_file}"
+      continue
+    else
+      exit_code=$?
+    fi
+    if [[ "${exit_code}" -eq 2 ]]; then
+      [[ -n "${assignee}" ]] && task_send_hook_feedback "${assignee}" "${task_id}" "${hook_name}" "${stderr_file}"
+      warn "Hook rejected completion: ${hook_name}"
+      cat "${stderr_file}" >&2 || true
+      rm -f "${stdout_file}" "${stderr_file}"
+      return 2
+    fi
+    err "Hook failed: ${hook_name} (exit ${exit_code})"
+    cat "${stderr_file}" >&2 || true
+    rm -f "${stdout_file}" "${stderr_file}"
+    return "${exit_code}"
+  done < <(python3 -c 'import json,sys
+for h in json.loads(sys.argv[1]):
+    print("{}\t{}".format(h.get("name", "hook"), h.get("command", "")))' "${hooks_json}")
+}
+
+cmd_task_create() {
+  ensure_repo
+  ensure_jj
+  local subject="${1:?Usage: jj-mailbox task create <subject> [--priority N] [--blocked-by id1,id2] [--assignee name]}"
+  shift || true
+  local priority=100
+  local blocked_by=""
+  local assignee="null"
+  local created_by
+  created_by="$(get_agent)"
+  local repo
+  repo="$(get_repo)"
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --priority) priority="${2:?}"; shift 2 ;;
+      --blocked-by) blocked_by="${2:-}"; shift 2 ;;
+      --assignee) assignee="\"${2:?}\""; shift 2 ;;
+      *)
+        err "Unknown option for task create: $1"
+        exit 1
+        ;;
+    esac
+  done
+
+  cd "${repo}"
+  local task_id
+  task_id="$(next_task_id)"
+
+  local blocked_json="[]"
+  if [[ -n "${blocked_by}" ]]; then
+    blocked_json="$(python3 -c 'import json,sys; print(json.dumps([x.strip() for x in sys.argv[1].split(",") if x.strip()]))' "${blocked_by}")"
+  fi
+
+  cat > "shared/tasks/${task_id}.json" <<EOF
+{
+  "id": "${task_id}",
+  "subject": "${subject}",
+  "activeForm": "${subject}",
+  "status": "pending",
+  "assignee": ${assignee},
+  "created_by": "${created_by}",
+  "created_at": "$(ts_iso)",
+  "priority": ${priority},
+  "blocks": [],
+  "blockedBy": ${blocked_json},
+  "metadata": {}
+}
+EOF
+
+  jj commit -m "Create task: ${task_id} ${subject}"
+  ok "Task created: ${task_id}"
+  echo "${task_id}"
+}
+
+cmd_task_claim() {
+  ensure_repo
+  ensure_jj
+  local repo agent
+  repo="$(get_repo)"
+  agent="$(get_agent)"
+  cd "${repo}"
+
+  local task_id
+  task_id="$(python3 - "shared/tasks" "${agent}" <<'PY'
+import json
+import os
+import sys
+
+task_dir = sys.argv[1]
+ready = []
+tasks = {}
+for name in os.listdir(task_dir):
+    if not name.endswith(".json"):
+        continue
+    path = os.path.join(task_dir, name)
+    with open(path) as f:
+        task = json.load(f)
+    tasks[task["id"]] = task
+
+for task in tasks.values():
+    if task.get("status") != "pending":
+        continue
+    blocked_by = task.get("blockedBy", [])
+    if any(tasks.get(dep, {}).get("status") != "completed" for dep in blocked_by):
+        continue
+    ready.append(task)
+
+ready.sort(key=lambda t: (t.get("priority", 9999), t.get("created_at", ""), t["id"]))
+print(ready[0]["id"] if ready else "")
+PY
+)"
+
+  if [[ -z "${task_id}" ]]; then
+    warn "No ready pending tasks to claim."
+    return 1
+  fi
+
+  local path="shared/tasks/${task_id}.json"
+  python_json_update "${path}" '
+payload["status"] = "in_progress"
+payload["assignee"] = sys.argv[2]
+payload.setdefault("metadata", {})
+payload["metadata"]["claimed_at"] = sys.argv[3]
+' "${agent}" "$(ts_iso)"
+
+  update_agent_status "${agent}" "busy" "${task_id}"
+  jj commit -m "Claim task: ${task_id} by ${agent}"
+  ok "Claimed task: ${task_id}"
+  echo "${task_id}"
+}
+
+cmd_task_complete() {
+  ensure_repo
+  ensure_jj
+  local task_id="${1:?Usage: jj-mailbox task complete <task-id>}"
+  local repo path assignee agent
+  repo="$(get_repo)"
+  path="$(task_path "${task_id}")"
+  agent="$(get_agent)"
+  [[ -f "${path}" ]] || { err "Task not found: ${task_id}"; exit 1; }
+  cd "${repo}"
+
+  assignee="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("assignee") or "")' "${path}")"
+  if [[ -n "${assignee}" && "${assignee}" != "${agent}" ]]; then
+    err "Task ${task_id} is assigned to ${assignee}, not ${agent}"
+    exit 1
+  fi
+
+  run_task_complete_hooks "${task_id}" "${assignee:-${agent}}" || {
+    local hook_status=$?
+    return "${hook_status}"
+  }
+
+  python_json_update "${path}" '
+payload["status"] = "completed"
+payload.setdefault("metadata", {})
+payload["metadata"]["completed_at"] = sys.argv[2]
+if not payload.get("assignee"):
+    payload["assignee"] = sys.argv[3]
+' "$(ts_iso)" "${agent}"
+
+  update_agent_status "${agent}" "idle" "__NULL__" "${task_id}"
+  jj commit -m "Complete task: ${task_id} by ${agent}"
+  ok "Completed task: ${task_id}"
+}
+
+cmd_task_list() {
+  ensure_repo
+  local repo
+  repo="$(get_repo)"
+  cd "${repo}"
+
+  python3 - "shared/tasks" <<'PY'
+import json
+import os
+import sys
+
+task_dir = sys.argv[1]
+tasks = []
+for name in sorted(os.listdir(task_dir)):
+    if not name.endswith(".json"):
+        continue
+    path = os.path.join(task_dir, name)
+    with open(path) as f:
+        tasks.append(json.load(f))
+
+if not tasks:
+    print("No tasks.")
+    raise SystemExit(0)
+
+tasks.sort(key=lambda t: (t.get("status", ""), t.get("priority", 9999), t.get("id", "")))
+for task in tasks:
+    blocked = ",".join(task.get("blockedBy", [])) or "-"
+    assignee = task.get("assignee") or "-"
+    print(f'{task["id"]}\t{task.get("status","?")}\tP{task.get("priority",9999)}\t{assignee}\tblockedBy={blocked}\t{task.get("subject","")}')
+PY
+}
+
+cmd_task() {
+  local subcmd="${1:-list}"
+  shift || true
+  case "${subcmd}" in
+    create)   cmd_task_create "$@" ;;
+    claim)    cmd_task_claim "$@" ;;
+    complete) cmd_task_complete "$@" ;;
+    list)     cmd_task_list "$@" ;;
+    *)
+      err "Unknown task subcommand: ${subcmd}"
+      exit 1
+      ;;
+  esac
 }
 
 cmd_inbox() {
@@ -474,14 +884,7 @@ cmd_sync() {
     agent="$(get_agent)"
     if [[ -f "agents/${agent}/status.json" ]]; then
       # Pass file path and timestamp as arguments (no bash variable interpolation in python)
-      python3 -c "
-import json,sys
-path, ts = sys.argv[1], sys.argv[2]
-with open(path, 'r+') as f:
-    s = json.load(f)
-    s['last_seen'] = ts
-    f.seek(0); json.dump(s, f, indent=2); f.truncate()
-" "agents/${agent}/status.json" "$(ts_iso)" 2>/dev/null || true
+      update_agent_status "${agent}" "$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("status","online"))' "agents/${agent}/status.json" 2>/dev/null || echo online)" "__KEEP__"
     fi
 
     # Fetch
@@ -602,7 +1005,9 @@ print(s.get('status','?'), s.get('last_seen','?'))
     local status_icon="⚪"
     [[ "${status}" == "online" ]] && status_icon="🟢"
     [[ "${status}" == "busy" ]] && status_icon="🟡"
+    [[ "${status}" == "idle" ]] && status_icon="💤"
     [[ "${status}" == "offline" ]] && status_icon="🔴"
+    [[ "${status}" == "waiting_approval" ]] && status_icon="🟣"
 
     echo -e "  ${status_icon} ${name}  (${status})  📬 ${inbox_count} msg  🕐 ${last_seen}"
   done
@@ -622,6 +1027,7 @@ main() {
     inbox)    cmd_inbox "$@" ;;
     thread)   cmd_thread "$@" ;;
     read)     cmd_read_and_process "$@" ;;
+    task)     cmd_task "$@" ;;
     sync)     cmd_sync "$@" ;;
     watch)    cmd_watch "$@" ;;
     status)   cmd_status "$@" ;;
