@@ -99,9 +99,9 @@ jobs:
     runs-on: ubuntu-latest
     env:
       LLM_API_KEY: ${{ secrets.KIMI_API_KEY }}
-      LLM_API_BASE: https://api.kimi.com/coding/v1
+      LLM_SDK: anthropic
+      ANTHROPIC_BASE_URL: https://api.kimi.com/coding/
       LLM_MODEL: kimi-for-coding
-      LLM_USER_AGENT: claude-code/1.0
     steps:
       - uses: actions/checkout@v4
 
