@@ -81,9 +81,10 @@ class AgentBackend:
     name = "base"
     tools: list[dict[str, Any]] = []
 
-    def __init__(self, api_key: str, model: str):
+    def __init__(self, api_key: str, model: str, base_url: str = ""):
         self.api_key = api_key
         self.model = model
+        self.base_url = base_url
 
     def make_initial_messages(self, system_prompt: str, user_prompt: str) -> list[dict[str, Any]]:
         raise NotImplementedError
@@ -138,12 +139,11 @@ class OpenAIBackend(AgentBackend):
     tools = OPENAI_TOOLS
 
     def __init__(self, api_key: str, model: str, base_url: str):
-        super().__init__(api_key=api_key, model=model)
+        super().__init__(api_key=api_key, model=model, base_url=base_url)
         import openai
 
         self._openai = openai
         self.client = openai.OpenAI(api_key=api_key, base_url=base_url)
-        self.base_url = base_url
 
     def make_initial_messages(self, system_prompt: str, user_prompt: str) -> list[dict[str, Any]]:
         return [
@@ -151,8 +151,7 @@ class OpenAIBackend(AgentBackend):
             {"role": "user", "content": user_prompt},
         ]
 
-    def run_turn(self, system_prompt: str, messages: list[dict[str, Any]], agent_name: str) -> AgentTurn:
-        del system_prompt
+    def run_turn(self, _system_prompt: str, messages: list[dict[str, Any]], agent_name: str) -> AgentTurn:
         response = None
         for attempt, delay in enumerate(RETRY_DELAYS + [None]):
             try:
@@ -165,7 +164,7 @@ class OpenAIBackend(AgentBackend):
                     temperature=0.7,
                 )
                 break
-            except Exception as exc:  # SDK-specific exception hierarchy differs by provider
+            except Exception as exc:  # SDK-specific exception hierarchy varies by provider
                 self._handle_api_exception(exc, agent_name, attempt, delay)
 
         if not response or not response.choices:
@@ -229,14 +228,12 @@ class AnthropicBackend(AgentBackend):
     tools = ANTHROPIC_TOOLS
 
     def __init__(self, api_key: str, model: str, base_url: str):
-        super().__init__(api_key=api_key, model=model)
+        super().__init__(api_key=api_key, model=model, base_url=base_url)
         import anthropic
 
         self.client = anthropic.Anthropic(api_key=api_key, base_url=base_url)
-        self.base_url = base_url
 
-    def make_initial_messages(self, system_prompt: str, user_prompt: str) -> list[dict[str, Any]]:
-        del system_prompt
+    def make_initial_messages(self, _system_prompt: str, user_prompt: str) -> list[dict[str, Any]]:
         return [{"role": "user", "content": user_prompt}]
 
     def run_turn(self, system_prompt: str, messages: list[dict[str, Any]], agent_name: str) -> AgentTurn:
@@ -348,7 +345,7 @@ def run_agent(agent_name, system_prompt, user_prompt, repo, backend: AgentBacken
 
     for _turn in range(MAX_TURNS):
         turn = backend.run_turn(system_prompt=system_prompt, messages=messages, agent_name=agent_name)
-        if not turn.assistant_message and not turn.tool_calls:
+        if not turn.tool_calls and not turn.final_text:
             print(f"  [{agent_name}] Empty response from {LLM_MODEL}, retrying turn...")
             continue
 
@@ -385,10 +382,7 @@ def main():
 
     print(f"SDK: {LLM_SDK}")
     print(f"Model: {LLM_MODEL}")
-    if backend.name == "anthropic":
-        print(f"API base: {ANTHROPIC_BASE_URL}")
-    else:
-        print(f"API base: {LLM_API_BASE}")
+    print(f"API base: {backend.base_url}")
     print()
 
     repo = setup_repo()
