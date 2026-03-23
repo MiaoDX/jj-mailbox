@@ -27,7 +27,14 @@ BIN = os.path.join(REPO_ROOT, "bin", "jj-mailbox")
 
 # Import shared helpers
 sys.path.insert(0, os.path.join(SCRIPT_DIR, ".."))
-from _helpers import setup_repo, send_message, read_message, count_messages, cleanup_repo
+from _helpers import (
+    cleanup_repo,
+    count_messages,
+    read_message,
+    run_cli,
+    send_message,
+    setup_repo,
+)
 
 
 def assert_eq(a, b, msg=""):
@@ -135,6 +142,17 @@ def main():
         print(f"  shared artifact exists ✓")
 
         # Refs chain verified above ✓
+
+        # Thread view reconstructs the full conversation from the middle message
+        thread_out, _, _ = run_cli(
+            [BIN, "thread", msg2_id],
+            env={"JJ_MAILBOX_REPO": repo},
+        )
+        print("Thread view:")
+        print(thread_out)
+        assert_in('Turn 1  planner → researcher  "Research task"', thread_out, "thread should include turn 1")
+        assert_in(f'Turn 2  researcher → planner  "Re: Research task"  [refs: {msg1_id}]', thread_out, "thread should include turn 2")
+        assert_in(f'Turn 3  planner → researcher  "Re: Research task"  [refs: {msg2_id}]', thread_out, "thread should include turn 3")
 
         print()
         print("=" * 60)
