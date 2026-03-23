@@ -90,6 +90,59 @@ cp -r skills/jj-mailbox ~/.openclaw/skills/
 
 Once installed, your OpenClaw agent can send and receive messages using the file conventions described in the skill. The sync daemon runs in the background.
 
+## MCP Server (FastMCP)
+
+`jj-mailbox` can also run as a native [Model Context Protocol](https://modelcontextprotocol.io) server so any MCP-compatible client can access the mailbox without shell wrappers.
+
+```bash
+python3 -m pip install -r mcp-server/requirements.txt
+
+export JJ_MAILBOX_REPO=~/my-mailbox
+export JJ_MAILBOX_AGENT=alice
+python3 mcp-server/server.py
+```
+
+Available MCP tools:
+
+- `send_message` — send a mailbox message to another agent
+- `read_inbox` — read and mark the oldest unread message
+- `check_inbox` — list unread messages for the configured agent
+- `get_status` — show all registered agents and unread counts
+- `write_artifact` — write shared output to `shared/artifacts/`
+
+### Claude Desktop setup
+
+Add the server to your Claude Desktop MCP config and set the mailbox repo + agent through environment variables:
+
+```json
+{
+  "mcpServers": {
+    "jj-mailbox": {
+      "command": "python3",
+      "args": ["/absolute/path/to/jj-mailbox/mcp-server/server.py"],
+      "env": {
+        "JJ_MAILBOX_REPO": "/absolute/path/to/your/mailbox-repo",
+        "JJ_MAILBOX_AGENT": "alice"
+      }
+    }
+  }
+}
+```
+
+### Local debugging
+
+Use the MCP Python SDK's development tooling to inspect the server locally:
+
+```bash
+uv run --with-requirements mcp-server/requirements.txt mcp dev mcp-server/server.py
+```
+
+If you prefer an HTTP endpoint for the MCP Inspector or Claude Code, run:
+
+```bash
+python3 mcp-server/server.py --transport streamable-http
+```
+
 ## Native Tool-Use Adapters (Claude Code / Codex)
 
 `jj-mailbox` includes reusable adapters so LLM agents can call mailbox operations as native tools:
