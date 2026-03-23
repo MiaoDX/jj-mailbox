@@ -89,10 +89,19 @@ Fields:
 
 ### Message Types
 
+Core types:
 - **`message`** — general communication
 - **`task`** — request for the recipient to do something
 - **`reply`** — response to a previous message (use `refs` to link)
 - **`broadcast`** — informational, no response expected
+
+Lifecycle types (v0.2):
+- **`idle`** — agent signals task completion and availability for new work
+- **`approval_request`** — agent requests lead/human review before proceeding
+- **`approval_response`** — approve or reject with feedback
+- **`shutdown`** — lead signals agent to wind down gracefully
+
+Lifecycle types are backward compatible: agents that don't recognize them can treat them as regular messages by reading the `body` field.
 
 ## Agent Profile
 
@@ -120,7 +129,59 @@ Fields:
 }
 ```
 
-Status values: `online`, `busy`, `offline`
+Status values: `online`, `busy`, `idle`, `waiting_approval`, `offline`
+
+| Status | Meaning | Triggered when |
+|--------|---------|----------------|
+| `online` | Online, processing messages | Agent starts |
+| `busy` | Executing a task | After claiming a task |
+| `idle` | Awaiting instructions | After task completion |
+| `waiting_approval` | Waiting for review | After sending `approval_request` |
+| `offline` | Offline | Agent exits |
+
+## Task Schema (v0.2)
+
+Tasks are JSON files in `shared/tasks/`. They enable structured task management with dependency graphs.
+
+`shared/tasks/{task-id}.json`:
+
+```json
+{
+  "version": "0.1",
+  "id": "task-a1b2c3",
+  "subject": "Implement Slack adapter",
+  "status": "pending",
+  "assignee": null,
+  "created_by": "lead",
+  "created_at": "2026-03-13T10:00:00Z",
+  "priority": 1,
+  "blocks": [],
+  "blockedBy": [],
+  "metadata": {}
+}
+```
+
+### Task State Machine
+
+```
+pending → in_progress → completed
+            ↓
+          blocked (when blockedBy contains incomplete tasks)
+```
+
+### Claiming Rules
+
+1. Find tasks where `status == "pending"` and all `blockedBy` tasks are `"completed"`
+2. Claim highest priority (lowest number) first
+3. Claim = set `assignee` + `status` to `"in_progress"`
+4. jj's concurrency safety ensures no conflicting claims
+
+### Quality Gate Hooks
+
+`jj-mailbox task complete <id> --hook <command>` runs a validation command:
+- Exit code 0: task marked completed
+- Exit code 2: task stays `in_progress`, stderr sent as feedback message to the agent
+- Other exit codes: hook error, task unchanged
 
 ## Operations
 
