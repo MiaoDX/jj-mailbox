@@ -1,4 +1,4 @@
-# jj-mailbox Protocol Specification v0.1
+# jj-mailbox Protocol Specification v0.2
 
 > File-based message passing for AI agents, powered by Jujutsu (jj).
 
@@ -56,19 +56,29 @@ Rules:
 - Message ID is a short random hex string (6+ chars)
 - Underscore `_` separates fields
 
-### Message Schema
+### Message Schema (v0.2)
 
 ```json
 {
-  "version": "0.1",
+  "version": "0.2",
   "id": "msg-a1b2c3",
+  "task_id": "task-001",
   "timestamp": "2026-03-11T14:30:00Z",
   "from": "alice",
   "to": "bob",
-  "type": "message",
-  "subject": "Research results on topic X",
-  "body": "Here are my findings...",
+  "type": "frame",
+  "subject": "Implement user authentication",
+  "body": "Please implement...",
   "refs": [],
+  "context": {
+    "priority": "high",
+    "deadline": "2026-03-12T18:00:00Z",
+    "parent_id": null
+  },
+  "payload": {
+    "acceptance_criteria": ["..."],
+    "constraints": {}
+  },
   "metadata": {}
 }
 ```
@@ -76,8 +86,9 @@ Rules:
 Fields:
 | Field | Required | Description |
 |-------|----------|-------------|
-| `version` | yes | Protocol version (`"0.1"`) |
+| `version` | yes | Protocol version (`"0.2"`) |
 | `id` | yes | Unique message ID |
+| `task_id` | no | Task identifier for grouping related messages |
 | `timestamp` | yes | UTC ISO 8601 |
 | `from` | yes | Sender agent name |
 | `to` | yes | Recipient agent name |
@@ -85,7 +96,17 @@ Fields:
 | `subject` | no | Short summary |
 | `body` | yes | Message content (plain text or markdown) |
 | `refs` | no | Array of referenced message IDs (for threading) |
+| `context` | no | Task context: `priority`, `deadline`, `parent_id` |
+| `payload` | no | Structured data (type-specific) |
 | `metadata` | no | Arbitrary key-value pairs |
+
+#### Context Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `priority` | string | `low`, `normal`, `high`, `critical` |
+| `deadline` | string | ISO 8601 datetime or `null` |
+| `parent_id` | string | Parent task/message ID or `null` |
 
 ### Message Types
 
@@ -95,13 +116,20 @@ Core types:
 - **`reply`** — response to a previous message (use `refs` to link)
 - **`broadcast`** — informational, no response expected
 
-Lifecycle types (v0.2):
+Lifecycle types:
 - **`idle`** — agent is idle and available for work
 - **`approval_request`** — request human/agent approval before proceeding
 - **`approval_response`** — approval or rejection in response to a request
 - **`shutdown`** — agent is shutting down
 
-Agents that don't understand a lifecycle type can safely fall back to reading the `body`.
+ACP Protocol types (v0.2):
+- **`frame`** — Framework defines task boundary and acceptance criteria
+- **`select`** — Execution confirms acceptance or proposes alternative
+- **`correct`** — Execution detects framework issue, requests correction
+- **`feedback`** — Execution provides progress update or intermediate result
+- **`adjust`** — Framework responds to correction/feedback with adjustment
+
+Agents that don't understand a specialized type can safely fall back to reading the `body`.
 
 ## Agent Profile
 
@@ -206,3 +234,84 @@ Each machine has a local clone. Sync via any git remote (GitHub, GitLab, self-ho
 ### Fallback to plain git
 
 The protocol works with plain git too. jj adds safety (concurrent access, conflict handling, operation log) but is not strictly required.
+
+## ACP Protocol (Agent Coordination Protocol)
+
+ACP is a task-centric coordination protocol built on top of jj-mailbox. It defines a structured conversation between a **Framework** agent (defining work) and an **Execution** agent (doing work).
+
+### ACP Message Types
+
+| Type | Direction | Purpose | Sync |
+|------|-----------|---------|------|
+| `frame` | Framework → Execution | Define task, acceptance criteria, constraints | Sync |
+| `select` | Execution → Framework | Accept, reject, or propose alternative | Sync |
+| `correct` | Execution → Framework | Report framework issue, request correction | Async |
+| `feedback` | Execution → Framework | Progress update, intermediate result | Async |
+| `adjust` | Framework → Execution | Respond to correction/feedback | Async |
+
+### ACP State Machine
+
+```
+INIT --frame/select--> ACTIVE --feedback*--> [loop]
+                          |
+                          +--correct/adjust--> ACTIVE
+                          |
+                          +--done/failed--> TERMINAL
+```
+
+### ACP Payload Examples
+
+**FRAME payload:**
+```json
+{
+  "acceptance_criteria": ["User can login with email/password", "Session expires after 24h"],
+  "constraints": {
+    "tech_stack": ["Python", "FastAPI"],
+    "max_lines": 200
+  },
+  "context_files": ["docs/auth-spec.md"]
+}
+```
+
+**SELECT payload:**
+```json
+{
+  "decision": "accept",  // or "reject", "propose_alternative"
+  "alternative": null,   // if proposing alternative
+  "estimated_hours": 4
+}
+```
+
+**FEEDBACK payload:**
+```json
+{
+  "progress_percent": 60,
+  "status": "in_progress",  // or "blocked", "needs_decision"
+  "artifacts": ["src/auth.py", "tests/test_auth.py"],
+  "blockers": []
+}
+```
+
+**CORRECT payload:**
+```json
+{
+  "issue": "contradiction",
+  "description": "Acceptance criteria #2 conflicts with constraint 'no external deps'",
+  "suggested_fix": "Allow JWT library or change criteria"
+}
+```
+
+### ACP Timeouts
+
+| Transition | Default | Action on timeout |
+|------------|---------|-------------------|
+| frame → select | 30s | Reject (task not accepted) |
+| correct → adjust | 5min | Escalate to human |
+| feedback → adjust | 10min | Continue with best effort |
+
+### Backward Compatibility
+
+ACP messages are valid jj-mailbox v0.2 messages. Non-ACP agents can:
+1. Read the `body` field for human-readable content
+2. Ignore `task_id`, `context`, and `payload` fields
+3. Treat ACP types as generic `message` type

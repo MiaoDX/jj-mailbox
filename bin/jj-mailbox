@@ -3,7 +3,7 @@
 # Periodically syncs the mailbox repo via jj + git remote
 set -euo pipefail
 
-VERSION="0.1.0"
+VERSION="0.2.0"
 DEFAULT_INTERVAL=30
 
 # --- Colors ---
@@ -28,7 +28,8 @@ Usage:
   jj-mailbox send <to> <subject> <body> [--refs <ids>] [--type <kind>]
                                                        Send a message
     Types: message (default), task, reply, broadcast,
-           idle, approval_request, approval_response, shutdown
+           idle, approval_request, approval_response, shutdown,
+           frame, select, correct, feedback, adjust (ACP protocol)
   jj-mailbox inbox [--agent <name>]                    Check inbox
   jj-mailbox thread <msg-id>                           Show a conversation thread
   jj-mailbox sync [--interval <seconds>]               Run sync loop
@@ -241,7 +242,7 @@ cmd_send() {
 
   # Validate message type
   case "${msg_type}" in
-    message|task|reply|broadcast|idle|approval_request|approval_response|shutdown) ;;
+    message|task|reply|broadcast|idle|approval_request|approval_response|shutdown|frame|select|correct|feedback|adjust) ;;
     *) err "Unsupported message type: ${msg_type}"; exit 1 ;;
   esac
 
@@ -278,8 +279,9 @@ cmd_send() {
 
   cat > "inbox/${to}/new/${filename}" <<EOF
 {
-  "version": "0.1",
+  "version": "0.2",
   "id": "${msg_id}",
+  "task_id": null,
   "timestamp": "$(ts_iso)",
   "from": "${from}",
   "to": "${to}",
@@ -287,6 +289,12 @@ cmd_send() {
   "subject": "${subject}",
   "body": "${body}",
   "refs": ${refs_json},
+  "context": {
+    "priority": "normal",
+    "deadline": null,
+    "parent_id": null
+  },
+  "payload": {},
   "metadata": {}
 }
 EOF
