@@ -301,6 +301,41 @@ INIT --frame/select--> ACTIVE --feedback*--> [loop]
 }
 ```
 
+### Workspace Lifecycle Contract
+
+The `payload.workspace` field (optional) defines a lifecycle agreement between spawner and skill for task-scoped isolated workspaces:
+
+```json
+{
+  "type": "task",
+  "payload": {
+    "workspace": {
+      "mode": "worktree-per-task",
+      "autoCleanup": true,
+      "workdir": "/tmp/wt-{task-id}"
+    },
+    "body": "..."
+  }
+}
+```
+
+**Fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `mode` | string | `worktree-per-task` (current supported mode) |
+| `autoCleanup` | boolean | If `true`, skill must clean up workspace on exit via `trap cleanup EXIT` |
+| `workdir` | string | Template for worktree path; `{task-id}` is replaced with the task's ID |
+
+**Behavior:**
+- **Spawner** creates the worktree before sending the task message
+- **Skill** executes inside the worktree and trusts it is isolated
+- **Cleanup** runs automatically on `EXIT` (success, failure, crash, or signal) via shell `trap`
+- If cleanup fails (dirty worktree), use `git worktree remove --force`
+
+**Why not change the protocol?**
+The protocol schema's `payload` is free-form JSON (`{}`); adding `workspace` as a contract field requires no schema change—only shared understanding documented here.
+
 ### ACP Timeouts
 
 | Transition | Default | Action on timeout |
